@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <rect width="1200" height="630" fill="#ffffff"/>
+  <rect width="1200" height="14" fill="#ff6f0f"/>
+  <text x="80" y="220" font-family="Pretendard, 'Apple SD Gothic Neo', sans-serif" font-weight="800" font-size="110" fill="#1a1c1f">carrot<tspan fill="#ff6f0f">·</tspan>chat</text>
+  <text x="80" y="300" font-family="Pretendard, 'Apple SD Gothic Neo', sans-serif" font-weight="600" font-size="38" fill="#33373d">재사용 가능한 웹채팅 SDK 데모</text>
+  <text x="80" y="358" font-family="Pretendard, sans-serif" font-size="28" fill="#6b7280">React · TypeScript · Zustand · Cloudflare Durable Objects (WebSocket Hibernation)</text>
+  <g transform="translate(80,440)">
+    <rect width="280" height="68" rx="34" fill="#fff3ea"/>
+    <text x="140" y="44" text-anchor="middle" font-family="Pretendard, sans-serif" font-weight="700" font-size="24" fill="#ff6f0f">🥕 Vitest 14 · Playwright 2</text>
+  </g>
+  <text x="80" y="580" font-family="Pretendard, sans-serif" font-size="22" fill="#6b7280">박성재 · NALDA — 당근 채팅팀 Frontend Engineer 인턴 지원</text>
+  <text x="1120" y="580" text-anchor="end" font-family="Pretendard, sans-serif" font-weight="600" font-size="22" fill="#ff6f0f">carrot.naldadev.com</text>
+</svg>

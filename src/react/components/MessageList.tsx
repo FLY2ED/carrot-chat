@@ -42,6 +42,14 @@ export function MessageList({ messages, selfId, reads }: Props) {
             {!mine && <span className="msg__name">{m.senderName}</span>}
             <div className="msg__bubble">{m.text}</div>
             <span className="msg__meta">
+              {m.maskApplied && (
+                <span
+                  className="msg__policy"
+                  title="서버에서 연락처/이메일이 자동 마스킹되었습니다"
+                >
+                  정책 적용
+                </span>
+              )}
               {mine && <span className="msg__read">{read ? "읽음" : "전송됨"}</span>}
               <time dateTime={new Date(m.ts).toISOString()}>{formatTime(m.ts)}</time>
             </span>

@@ -1,17 +1,18 @@
 import { DurableObject } from "cloudflare:workers";
-import { maskContact } from "../src/chat-core/protocol";
-import type {
-  ClientEvent,
-  Member,
-  Message,
-  ServerEvent,
-} from "../src/chat-core/types";
+import { ClientEventSchema, maskContact } from "../src/chat-core/protocol";
+import type { Member, Message, ServerEvent } from "../src/chat-core/types";
 
 /** Per-connection data that must survive WebSocket hibernation. */
 interface Attachment {
   userId: string;
   name: string;
+  /** Timestamps of recent `send` events — sliding-window rate limit. */
+  sends?: number[];
 }
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 20;
+const HISTORY_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * One ChatRoom Durable Object per room id. Holds the WebSocket connections and
@@ -30,7 +31,15 @@ export class ChatRoom extends DurableObject<Env> {
         ts         INTEGER NOT NULL
       )`,
     );
-    // The runtime answers "ping" with "pong" without waking the object.
+    // Idempotent migration — add the column on existing rooms once.
+    try {
+      ctx.storage.sql.exec(
+        "ALTER TABLE messages ADD COLUMN maskApplied INTEGER NOT NULL DEFAULT 0",
+      );
+    } catch {
+      /* column already exists from a previous migration */
+    }
+    // Runtime answers "ping" with "pong" without waking the object.
     ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair("ping", "pong"),
     );
@@ -44,7 +53,7 @@ export class ChatRoom extends DurableObject<Env> {
     const { 0: client, 1: server } = new WebSocketPair();
     // acceptWebSocket (not server.accept()) is what enables hibernation.
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ userId, name } satisfies Attachment);
+    server.serializeAttachment({ userId, name, sends: [] } satisfies Attachment);
 
     this.sendTo(server, {
       type: "hello",
@@ -60,34 +69,68 @@ export class ChatRoom extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer): Promise<void> {
     if (typeof raw !== "string") return;
-    let event: ClientEvent;
+
+    let payload: unknown;
     try {
-      event = JSON.parse(raw);
+      payload = JSON.parse(raw);
     } catch {
       return; // ignore non-JSON frames (e.g. a stray "pong")
     }
+
+    // Runtime validation — TypeScript types are not a defence against tampering.
+    const parsed = ClientEventSchema.safeParse(payload);
+    if (!parsed.success) {
+      this.sendTo(ws, {
+        type: "system",
+        severity: "warn",
+        reason: "validation_failed",
+        detail: parsed.error.issues[0]?.message ?? "invalid payload",
+      });
+      return;
+    }
+    const event = parsed.data;
+
     const att = ws.deserializeAttachment() as Attachment | null;
     if (!att) return;
 
     switch (event.type) {
       case "send": {
+        // Sliding-window rate limit per connection.
+        const now = Date.now();
+        const recent = (att.sends ?? []).filter((t) => t > now - RATE_LIMIT_WINDOW_MS);
+        if (recent.length >= RATE_LIMIT_MAX) {
+          this.sendTo(ws, { type: "system", severity: "warn", reason: "rate_limited" });
+          return;
+        }
+        recent.push(now);
+        ws.serializeAttachment({ ...att, sends: recent } satisfies Attachment);
+
         // Policy control: strip phone/email/contact handles (off-platform deals).
-        const text = maskContact(event.text).trim().slice(0, 2000);
-        if (!text) return;
+        const original = event.text.trim().slice(0, 2000);
+        if (!original) return;
+        const masked = maskContact(original);
+        const maskApplied = original !== masked;
         const message: Message = {
           id: crypto.randomUUID(),
           senderId: att.userId,
           senderName: att.name,
-          text,
-          ts: Date.now(),
+          text: masked,
+          ts: now,
+          maskApplied,
         };
         this.ctx.storage.sql.exec(
-          "INSERT INTO messages (id, senderId, senderName, text, ts) VALUES (?, ?, ?, ?, ?)",
+          "INSERT INTO messages (id, senderId, senderName, text, ts, maskApplied) VALUES (?, ?, ?, ?, ?, ?)",
           message.id,
           message.senderId,
           message.senderName,
           message.text,
           message.ts,
+          maskApplied ? 1 : 0,
+        );
+        // Keep history small on a public demo.
+        this.ctx.storage.sql.exec(
+          "DELETE FROM messages WHERE ts < ?",
+          now - HISTORY_TTL_MS,
         );
         this.broadcast({ type: "message", message });
         break;
@@ -106,7 +149,17 @@ export class ChatRoom extends DurableObject<Env> {
     }
   }
 
-  async webSocketClose(): Promise<void> {
+  async webSocketClose(ws: WebSocket): Promise<void> {
+    // Clear any lingering typing indicator for the user whose socket just died.
+    const att = ws.deserializeAttachment() as Attachment | null;
+    if (att) {
+      this.broadcast({
+        type: "typing",
+        senderId: att.userId,
+        senderName: att.name,
+        isTyping: false,
+      });
+    }
     this.broadcastPresence();
   }
 
@@ -115,10 +168,29 @@ export class ChatRoom extends DurableObject<Env> {
   }
 
   private recentMessages(): Message[] {
+    type Row = {
+      id: string;
+      senderId: string;
+      senderName: string;
+      text: string;
+      ts: number;
+      maskApplied: number;
+    };
     const rows = this.ctx.storage.sql
-      .exec("SELECT id, senderId, senderName, text, ts FROM messages ORDER BY ts DESC LIMIT 100")
-      .toArray() as unknown as Message[];
-    return rows.reverse();
+      .exec(
+        "SELECT id, senderId, senderName, text, ts, maskApplied FROM messages ORDER BY ts DESC LIMIT 100",
+      )
+      .toArray() as unknown as Row[];
+    return rows
+      .map((r) => ({
+        id: r.id,
+        senderId: r.senderId,
+        senderName: r.senderName,
+        text: r.text,
+        ts: r.ts,
+        maskApplied: r.maskApplied === 1,
+      }))
+      .reverse();
   }
 
   private members(): Member[] {

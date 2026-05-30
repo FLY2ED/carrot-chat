@@ -9,6 +9,17 @@ export function buildWsUrl(roomId: string, user: string, name: string): string {
   return `${proto}//${location.host}/api/room/${encodeURIComponent(roomId)}/ws?${qs}`;
 }
 
+const NOTICE_FOR = (reason: string, detail?: string): string => {
+  switch (reason) {
+    case "rate_limited":
+      return "메시지 속도 제한 — 잠시 후 다시 시도해 주세요";
+    case "validation_failed":
+      return `잘못된 입력: ${detail ?? "프로토콜 검증 실패"}`;
+    default:
+      return detail ?? "정책이 적용되었습니다";
+  }
+};
+
 /**
  * Binds a {@link ChatClient} to a per-instance Zustand store and exposes the
  * reactive state plus stable action callbacks. The SDK does the work; React
@@ -57,6 +68,10 @@ export function useChatRoom(roomId: string, user: string, name: string) {
             reads: { ...s.reads, [event.readerId]: event.messageId },
           }));
           break;
+        case "system":
+          store.setState({ notice: NOTICE_FOR(event.reason, event.detail) });
+          setTimeout(() => store.setState({ notice: null }), 3000);
+          break;
       }
     });
 
@@ -73,8 +88,11 @@ export function useChatRoom(roomId: string, user: string, name: string) {
   const actions = useMemo(
     () => ({
       sendMessage: (text: string) => clientRef.current?.send({ type: "send", text }),
-      setTyping: (isTyping: boolean) => clientRef.current?.send({ type: "typing", isTyping }),
-      markRead: (messageId: string) => clientRef.current?.send({ type: "read", messageId }),
+      setTyping: (isTyping: boolean) =>
+        clientRef.current?.send({ type: "typing", isTyping }),
+      markRead: (messageId: string) =>
+        clientRef.current?.send({ type: "read", messageId }),
+      simulateDisconnect: () => clientRef.current?.simulateDisconnect(),
     }),
     [],
   );

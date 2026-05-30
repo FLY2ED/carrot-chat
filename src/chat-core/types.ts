@@ -7,6 +7,8 @@ export interface Message {
   senderName: string;
   text: string;
   ts: number;
+  /** True when the server applied the contact-masking policy to this message. */
+  maskApplied?: boolean;
 }
 
 export interface Member {
@@ -16,11 +18,8 @@ export interface Member {
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "closed";
 
-/** Events the client sends to the server. */
-export type ClientEvent =
-  | { type: "send"; text: string }
-  | { type: "typing"; isTyping: boolean }
-  | { type: "read"; messageId: string };
+// ClientEvent is defined alongside its Zod schema in ./protocol.
+export type { ClientEvent } from "./protocol";
 
 /** Events the server broadcasts to clients. */
 export type ServerEvent =
@@ -28,4 +27,5 @@ export type ServerEvent =
   | { type: "message"; message: Message }
   | { type: "typing"; senderId: string; senderName: string; isTyping: boolean }
   | { type: "read"; messageId: string; readerId: string }
-  | { type: "presence"; members: Member[] };
+  | { type: "presence"; members: Member[] }
+  | { type: "system"; severity: "info" | "warn"; reason: string; detail?: string };

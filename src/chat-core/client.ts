@@ -106,6 +106,21 @@ export class ChatClient {
     }
   }
 
+  /**
+   * Drop the underlying WebSocket as if the network died. The close handler
+   * sees a non-intentional close and starts the normal reconnect cycle —
+   * useful for the demo "재연결 시뮬레이션" button.
+   */
+  simulateDisconnect(): void {
+    if (this.ws) {
+      try {
+        this.ws.close(4000, "simulated");
+      } catch {
+        /* noop */
+      }
+    }
+  }
+
   on(listener: EventListener): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

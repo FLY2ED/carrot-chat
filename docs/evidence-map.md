@@ -10,7 +10,7 @@
 | 상태관리 라이브러리 경험 | 인스턴스별 Zustand vanilla store | `src/react/store.ts`, `src/react/useChatRoom.ts` |
 | 테스트 전략과 테스트 코드 | 순수 함수, SDK 상태머신, 컴포넌트, 실제 WebSocket E2E로 분리 | `src/chat-core/*.test.ts`, `src/react/components/Composer.test.tsx`, `e2e/chat.spec.ts` |
 | 기존 코드베이스를 읽고 일관된 스타일로 개선 | SDK, React 바인딩, Worker 계층을 분리해 역할별 파일 구조 유지 | `src/chat-core`, `src/react`, `worker` |
-| WebSocket/HTTP 이해 | WebSocket 연결, 자동 재연결, 하트비트, DO 브로드캐스트 | `src/chat-core/client.ts`, `worker/chat-room.ts` |
+| WebSocket/HTTP 이해 | WebSocket 연결·자동 재연결·하트비트·DO 브로드캐스트. 더불어 artdata 실서비스에서 Socket.io 기반 실시간 1:1 채팅(읽음/타이핑/파일/마스킹)을 원작자로 구현 | `src/chat-core/client.ts`, `worker/chat-room.ts`, artdata (Socket.io) |
 | 확장 가능한 메시지 구조 | 클라이언트/서버 공용 이벤트 모델을 discriminated union으로 정의 | `src/chat-core/types.ts` |
 | SDK 안전 배포를 위한 테스트 인프라 | Vitest + Testing Library + Playwright E2E | `package.json`, `vitest.config.ts`, `playwright.config.ts` |
 | 운영 페이지/정책 제어 감각 | 서버측 연락처 마스킹 정책, 읽음/타이핑/presence 상태 가시화 | `src/chat-core/protocol.ts`, `worker/chat-room.ts`, `src/react/components/*` |
@@ -64,13 +64,21 @@
 - Vitest와 Playwright 기반 QA 시나리오가 있음.
 - 지원서에서는 "사용자 플로우와 운영 리스크를 검증 체크리스트로 관리한 경험"으로 사용.
 
-### Snow Widget
+### KORI VOCA
 
-경로: `/Volumes/p44/Documents/snow-widget`
+경로: App Store 출시 · 팀 '피피' · ST창업오디션 최우수상 (2025)
 
-- Electron + React + TypeScript + Vite + Tailwind 기반 Windows 위젯 앱.
-- 캘린더/메모/스크린샷, Electron IPC, Win32 제약, 패키징 등 플랫폼 제약을 다룸.
-- 지원서에서는 "새로운 실행 환경의 제약을 문서로 정리하고, 재발 방지 규칙을 남긴 경험"으로 사용.
+- React Native + TypeScript 한국어 학습 앱. SM-2 간격 반복, 접근성(고대비·스크린리더·reduced motion) 적용.
+- 지원서에서는 "팀 협업으로 React Native 제품을 App Store까지 출시·수상한 경험"으로 사용.
+
+### Desktop Dday
+
+경로: 외부 매각 · GitHub 비공개 (포트폴리오 활용 허용)
+
+- Electron + Vue 3로 1인 개발한 바탕화면 D-Day 위젯. Microsoft·Google·Apple 3개 스토어 출시.
+- AWS Amplify(Cognito + AppSync + DataStore) 기기간 동기화 + Google/Apple OAuth, 투명·클릭통과 위젯 등 네이티브 통합 직접 구현.
+- Disquiet 위클리 프로덕트 선정, 운영 후 매각(Exit).
+- 지원서에서는 "작은 제품을 끝까지 만들어 출시·운영·종료까지 책임진 오너십 경험"으로 사용.
 
 ### landing-security / chickenplace 계열
 

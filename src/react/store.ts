@@ -11,6 +11,8 @@ export interface ChatState {
   typing: Record<string, string>;
   /** readerId → id of the last message they have read. */
   reads: Record<string, string>;
+  /** Most recent system-event notice (rate-limit, validation, etc.). Auto-clears. */
+  notice: string | null;
 }
 
 export const initialChatState: ChatState = {
@@ -21,6 +23,7 @@ export const initialChatState: ChatState = {
   members: [],
   typing: {},
   reads: {},
+  notice: null,
 };
 
 /** A fresh store per room instance (one per ChatPanel / connection). */
