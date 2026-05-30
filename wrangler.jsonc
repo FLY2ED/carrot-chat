@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "carrot-chat",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-05-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    // Vite (with @cloudflare/vite-plugin) builds the React client into ./dist/client
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Only /api/* hits the Worker; everything else is served straight from assets.
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "CHAT_ROOM", "class_name": "ChatRoom" }]
+  },
+  "migrations": [
+    // SQLite-backed Durable Objects — available on the Workers Free plan.
+    { "tag": "v1", "new_sqlite_classes": ["ChatRoom"] }
+  ],
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "carrot.naldadev.com", "custom_domain": true }]
+}
