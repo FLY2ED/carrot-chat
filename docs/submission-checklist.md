@@ -9,7 +9,7 @@
 - [x] README 첫 화면에 프로젝트 목적·기술 스택·테스트 명령 노출
 - [x] 이력서 PDF: `resume/박성재_이력서_당근채팅팀.pdf`
 - [x] 포트폴리오 링크 txt: `resume/portfolio-links.txt`
-- [x] 지원폼 답변 모음: `docs/form-answers.md`
+- [x] 지원폼 답변 모음: 저장소 외부 `resume/form-answers.md` (개인정보 보호를 위해 공개 repo에서 제외)
 
 ## 보안 / 위생
 

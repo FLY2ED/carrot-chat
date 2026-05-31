@@ -20,6 +20,8 @@ const NOTICE_FOR = (reason: string, detail?: string): string => {
   }
 };
 
+const NOTICE_AUTOCLEAR_MS = 3000;
+
 /**
  * Binds a {@link ChatClient} to a per-instance Zustand store and exposes the
  * reactive state plus stable action callbacks. The SDK does the work; React
@@ -29,6 +31,7 @@ export function useChatRoom(roomId: string, user: string, name: string) {
   const storeRef = useRef(createChatStore());
   const store = storeRef.current;
   const clientRef = useRef<ChatClient | null>(null);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const client = new ChatClient({ url: buildWsUrl(roomId, user, name) });
@@ -70,7 +73,12 @@ export function useChatRoom(roomId: string, user: string, name: string) {
           break;
         case "system":
           store.setState({ notice: NOTICE_FOR(event.reason, event.detail) });
-          setTimeout(() => store.setState({ notice: null }), 3000);
+          // Replace any in-flight clear so the newest notice survives long enough.
+          if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+          noticeTimerRef.current = setTimeout(() => {
+            store.setState({ notice: null });
+            noticeTimerRef.current = null;
+          }, NOTICE_AUTOCLEAR_MS);
           break;
       }
     });
@@ -80,6 +88,10 @@ export function useChatRoom(roomId: string, user: string, name: string) {
       off();
       offStatus();
       client.close();
+      if (noticeTimerRef.current) {
+        clearTimeout(noticeTimerRef.current);
+        noticeTimerRef.current = null;
+      }
     };
   }, [roomId, user, name, store]);
 

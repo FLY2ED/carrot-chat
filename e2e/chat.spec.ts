@@ -43,4 +43,7 @@ test("masks contact details server-side before broadcasting", async ({ page }) =
 
   await expect(bada.getByText("[비공개]")).toBeVisible();
   await expect(bada.getByText("010-1234-5678")).toHaveCount(0);
+  // The policy badge is rendered alongside the masked message so operators/users
+  // can see that the server applied a rule, not just that the text changed.
+  await expect(bada.getByText("정책 적용")).toBeVisible();
 });

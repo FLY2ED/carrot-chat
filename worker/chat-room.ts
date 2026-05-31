@@ -176,9 +176,13 @@ export class ChatRoom extends DurableObject<Env> {
       ts: number;
       maskApplied: number;
     };
+    // Filter at read time too — cleanup-on-insert misses rooms that go idle
+    // long enough for messages to age past the TTL without a new send.
+    const cutoff = Date.now() - HISTORY_TTL_MS;
     const rows = this.ctx.storage.sql
       .exec(
-        "SELECT id, senderId, senderName, text, ts, maskApplied FROM messages ORDER BY ts DESC LIMIT 100",
+        "SELECT id, senderId, senderName, text, ts, maskApplied FROM messages WHERE ts >= ? ORDER BY ts DESC LIMIT 100",
+        cutoff,
       )
       .toArray() as unknown as Row[];
     return rows

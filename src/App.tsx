@@ -5,14 +5,24 @@ const ROOM_KEY = "carrot-chat:room";
 const NICK_ALICE_KEY = "carrot-chat:alice";
 const NICK_BOB_KEY = "carrot-chat:bob";
 
+// Mirrors the worker's `/api/room/:roomId/ws` route. Anything outside this
+// shape would 404 forever and trap the client in a reconnect loop, so we
+// sanitize on the way in and fall back to a fresh room.
+const ROOM_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+function sanitizeRoom(value: string | null): string | null {
+  if (!value) return null;
+  return ROOM_RE.test(value) ? value : null;
+}
+
 function randomRoomId(): string {
   return `room-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function getInitialRoom(): string {
-  const param = new URLSearchParams(location.search).get("room");
+  const param = sanitizeRoom(new URLSearchParams(location.search).get("room"));
   if (param) return param;
-  const stored = sessionStorage.getItem(ROOM_KEY);
+  const stored = sanitizeRoom(sessionStorage.getItem(ROOM_KEY));
   if (stored) return stored;
   const fresh = randomRoomId();
   sessionStorage.setItem(ROOM_KEY, fresh);
