@@ -25,6 +25,7 @@ export class ChatClient {
   private intentionalClose = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private nextReconnectDelayFloorMs: number | null = null;
   private readonly listeners = new Set<EventListener>();
   private readonly statusListeners = new Set<StatusListener>();
   private readonly opts: Required<ChatClientOptions>;
@@ -72,6 +73,7 @@ export class ChatClient {
     });
 
     ws.addEventListener("close", () => {
+      if (ws !== this.ws) return;
       this.stopHeartbeat();
       if (this.intentionalClose) {
         this.setStatus("closed");
@@ -90,14 +92,24 @@ export class ChatClient {
   }
 
   private scheduleReconnect(): void {
+    if (this.reconnectTimer) return;
     if (this.attempt >= this.opts.maxReconnectAttempts) {
+      this.nextReconnectDelayFloorMs = null;
       this.setStatus("closed");
       return;
     }
     this.setStatus("reconnecting");
-    const delay = withJitter(nextDelay(this.attempt), this.opts.rng);
+    const policyDelay = withJitter(nextDelay(this.attempt), this.opts.rng);
+    const delay =
+      this.nextReconnectDelayFloorMs === null
+        ? policyDelay
+        : Math.max(policyDelay, this.nextReconnectDelayFloorMs);
+    this.nextReconnectDelayFloorMs = null;
     this.attempt += 1;
-    this.reconnectTimer = setTimeout(() => this.open(), delay);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.open();
+    }, delay);
   }
 
   send(event: ClientEvent): void {
@@ -111,13 +123,16 @@ export class ChatClient {
    * sees a non-intentional close and starts the normal reconnect cycle —
    * useful for the demo "재연결 시뮬레이션" button.
    */
-  simulateDisconnect(): void {
+  simulateDisconnect(options: { minReconnectDelayMs?: number } = {}): void {
     if (this.ws) {
+      this.nextReconnectDelayFloorMs = Math.max(0, options.minReconnectDelayMs ?? 0);
       try {
         this.ws.close(4000, "simulated");
       } catch {
         /* noop */
       }
+      this.stopHeartbeat();
+      this.scheduleReconnect();
     }
   }
 
@@ -135,6 +150,7 @@ export class ChatClient {
   close(): void {
     this.intentionalClose = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.nextReconnectDelayFloorMs = null;
     this.stopHeartbeat();
     try {
       this.ws?.close(1000, "client closed");

@@ -21,6 +21,7 @@ const NOTICE_FOR = (reason: string, detail?: string): string => {
 };
 
 const NOTICE_AUTOCLEAR_MS = 3000;
+const RECONNECT_SIM_VISIBLE_MS = 1500;
 
 /**
  * Binds a {@link ChatClient} to a per-instance Zustand store and exposes the
@@ -104,7 +105,10 @@ export function useChatRoom(roomId: string, user: string, name: string) {
         clientRef.current?.send({ type: "typing", isTyping }),
       markRead: (messageId: string) =>
         clientRef.current?.send({ type: "read", messageId }),
-      simulateDisconnect: () => clientRef.current?.simulateDisconnect(),
+      simulateDisconnect: () =>
+        clientRef.current?.simulateDisconnect({
+          minReconnectDelayMs: RECONNECT_SIM_VISIBLE_MS,
+        }),
     }),
     [],
   );

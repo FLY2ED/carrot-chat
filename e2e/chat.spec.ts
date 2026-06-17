@@ -47,3 +47,19 @@ test("masks contact details server-side before broadcasting", async ({ page }) =
   // can see that the server applied a rule, not just that the text changed.
   await expect(bada.getByText("정책 적용")).toBeVisible();
 });
+
+test("reconnect simulation updates Alice status before recovering", async ({ page }) => {
+  const room = `e2e-reconnect-${Date.now()}`;
+  await page.goto(`/?room=${room}`);
+
+  const alice = page.locator('section[aria-label="앨리스 채팅 패널"]');
+  const input = alice.getByLabel("메시지 입력");
+  await expect(alice.getByText("실시간 연결됨")).toBeVisible();
+
+  await page.getByRole("button", { name: "재연결 시뮬레이션 (앨리스)" }).click();
+
+  await expect(alice.getByText("재연결 중…")).toBeVisible();
+  await expect(input).toBeDisabled();
+  await expect(alice.getByText("실시간 연결됨")).toBeVisible({ timeout: 5000 });
+  await expect(input).toBeEnabled();
+});

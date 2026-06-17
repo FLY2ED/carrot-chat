@@ -5,6 +5,7 @@ import type { ServerEvent } from "./types";
 /** Minimal WebSocket stand-in we can drive synchronously from tests. */
 class FakeWebSocket {
   static instances: FakeWebSocket[] = [];
+  static emitCloseOnClose = true;
   readonly url: string;
   readonly sent: string[] = [];
   closed = false;
@@ -23,7 +24,7 @@ class FakeWebSocket {
   }
   close() {
     this.closed = true;
-    this.emit("close", {});
+    if (FakeWebSocket.emitCloseOnClose) this.emit("close", {});
   }
 
   emit(type: string, ev: unknown) {
@@ -39,6 +40,7 @@ class FakeWebSocket {
 
 const makeClient = (overrides = {}) => {
   FakeWebSocket.instances = [];
+  FakeWebSocket.emitCloseOnClose = true;
   return new ChatClient({
     url: "ws://test/api/room/x/ws",
     WebSocketCtor: FakeWebSocket as unknown as typeof WebSocket,
@@ -87,6 +89,34 @@ describe("ChatClient", () => {
 
     // Backoff for attempt 0 = 500ms (jitter neutralised by rng 0.5).
     vi.advanceTimersByTime(500);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
+  it("can keep a simulated disconnect visible before reconnecting", () => {
+    const client = makeClient();
+    client.connect();
+    FakeWebSocket.instances[0].open();
+
+    client.simulateDisconnect({ minReconnectDelayMs: 1500 });
+    expect(client.connectionStatus).toBe("reconnecting");
+
+    vi.advanceTimersByTime(1499);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+
+    vi.advanceTimersByTime(1);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+  });
+
+  it("reconnects a simulated disconnect even if the browser delays close", () => {
+    const client = makeClient();
+    client.connect();
+    FakeWebSocket.instances[0].open();
+    FakeWebSocket.emitCloseOnClose = false;
+
+    client.simulateDisconnect({ minReconnectDelayMs: 1500 });
+    expect(client.connectionStatus).toBe("reconnecting");
+
+    vi.advanceTimersByTime(1500);
     expect(FakeWebSocket.instances).toHaveLength(2);
   });
 
