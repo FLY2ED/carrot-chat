@@ -23,3 +23,47 @@ export const ClientEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export type ClientEvent = z.infer<typeof ClientEventSchema>;
+
+// ── Shared message/member models — single source of truth, imported by the
+// worker too so client and server validate against the exact same schema. ──
+export const MessageSchema = z.object({
+  id: z.string(),
+  senderId: z.string(),
+  senderName: z.string(),
+  text: z.string(),
+  ts: z.number(),
+  maskApplied: z.boolean().optional(),
+});
+export type Message = z.infer<typeof MessageSchema>;
+
+export const MemberSchema = z.object({ id: z.string(), name: z.string() });
+export type Member = z.infer<typeof MemberSchema>;
+
+// Runtime schema for events the server broadcasts to clients. The client runs
+// `ServerEventSchema.safeParse` on every frame so a malformed (or tampered)
+// payload never reaches the UI — the TypeScript types alone are not a defence.
+export const ServerEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("hello"),
+    selfId: z.string(),
+    selfName: z.string(),
+    history: z.array(MessageSchema),
+    members: z.array(MemberSchema),
+  }),
+  z.object({ type: z.literal("message"), message: MessageSchema }),
+  z.object({
+    type: z.literal("typing"),
+    senderId: z.string(),
+    senderName: z.string(),
+    isTyping: z.boolean(),
+  }),
+  z.object({ type: z.literal("read"), messageId: z.string(), readerId: z.string() }),
+  z.object({ type: z.literal("presence"), members: z.array(MemberSchema) }),
+  z.object({
+    type: z.literal("system"),
+    severity: z.enum(["info", "warn"]),
+    reason: z.string(),
+    detail: z.string().optional(),
+  }),
+]);
+export type ServerEvent = z.infer<typeof ServerEventSchema>;
