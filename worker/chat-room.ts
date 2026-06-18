@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { ClientEventSchema, maskContact } from "../src/chat-core/protocol";
-import type { Member, Message, ServerEvent } from "../src/chat-core/types";
+import { ClientEventSchema, maskContact } from "../src/chat-core";
+import type { Member, Message, ServerEvent } from "../src/chat-core";
 
 /** Per-connection data that must survive WebSocket hibernation. */
 interface Attachment {

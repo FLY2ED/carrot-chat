@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { ConnectionStatus, Member, Message } from "../chat-core/types";
+import type { ConnectionStatus, Member, Message } from "../chat-core";
 
 export interface ChatState {
   status: ConnectionStatus;

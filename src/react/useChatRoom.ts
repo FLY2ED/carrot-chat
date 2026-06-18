@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useStore } from "zustand";
-import { ChatClient } from "../chat-core/client";
+import { ChatClient } from "../chat-core";
 import { createChatStore } from "./store";
 import { getClientId } from "./clientId";
 import {
@@ -10,7 +10,7 @@ import {
   prependPage,
   reconcileEcho,
 } from "./messageReducer";
-import type { Message } from "../chat-core/types";
+import type { Message } from "../chat-core";
 
 export function buildWsUrl(
   roomId: string,
