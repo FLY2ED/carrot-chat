@@ -16,6 +16,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.14.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^4.4.3",

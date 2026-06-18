@@ -65,6 +65,9 @@ export function ChatPanel({ roomId, user, name, accent, onApi }: Props) {
         selfId={room.selfId}
         reads={room.reads}
         onRetry={room.retry}
+        onLoadOlder={room.loadOlder}
+        hasMoreHistory={room.hasMoreHistory}
+        loadingOlder={room.loadingOlder}
       />
       <TypingIndicator names={typingNames} />
       {room.notice && (
