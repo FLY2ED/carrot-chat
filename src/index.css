@@ -263,6 +263,18 @@ body {
   margin-top: 3px;
 }
 .msg__read { color: var(--accent); font-weight: 700; }
+.msg--sending .msg__bubble { opacity: 0.55; }
+.msg--failed .msg__bubble { border: 1px solid #e5484d; }
+.msg__retry {
+  border: none;
+  background: none;
+  color: #e5484d;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+.msg__retry:hover { text-decoration: underline; }
 .msg__policy {
   background: #fff3ea;
   color: var(--accent);

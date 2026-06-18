@@ -17,9 +17,19 @@ export function maskContact(text: string): string {
 // `ClientEventSchema.safeParse(json)` so a malformed (or tampered) payload
 // never reaches business logic — the TypeScript types alone are not a defence.
 export const ClientEventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("send"), text: z.string().min(1).max(4000) }),
+  z.object({
+    type: z.literal("send"),
+    text: z.string().min(1).max(4000),
+    /** Client-generated id so the optimistic bubble can be reconciled with the echo. */
+    clientMsgId: z.string().min(1).max(64).optional(),
+  }),
   z.object({ type: z.literal("typing"), isTyping: z.boolean() }),
   z.object({ type: z.literal("read"), messageId: z.string().min(1).max(128) }),
+  z.object({
+    type: z.literal("history_request"),
+    beforeSeq: z.number().int().positive().optional(),
+    limit: z.number().int().min(1).max(100).optional(),
+  }),
 ]);
 
 export type ClientEvent = z.infer<typeof ClientEventSchema>;
@@ -33,6 +43,12 @@ export const MessageSchema = z.object({
   text: z.string(),
   ts: z.number(),
   maskApplied: z.boolean().optional(),
+  /** Server-assigned monotonic order (SQLite rowid). Absent on optimistic messages. */
+  seq: z.number().optional(),
+  /** Echoed back by the server to correlate with the sender's optimistic bubble. */
+  clientMsgId: z.string().optional(),
+  /** Client-local delivery state. Never set by the server. */
+  status: z.enum(["sending", "sent", "failed"]).optional(),
 });
 export type Message = z.infer<typeof MessageSchema>;
 
@@ -64,6 +80,11 @@ export const ServerEventSchema = z.discriminatedUnion("type", [
     severity: z.enum(["info", "warn"]),
     reason: z.string(),
     detail: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("history_page"),
+    messages: z.array(MessageSchema),
+    hasMore: z.boolean(),
   }),
 ]);
 export type ServerEvent = z.infer<typeof ServerEventSchema>;

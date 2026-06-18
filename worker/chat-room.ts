@@ -6,13 +6,37 @@ import type { Member, Message, ServerEvent } from "../src/chat-core/types";
 interface Attachment {
   userId: string;
   name: string;
+  /** Browser-install id (shared across tabs) — keys the persistent rate-limit window. */
+  clientId: string;
   /** Timestamps of recent `send` events — sliding-window rate limit. */
   sends?: number[];
+}
+
+interface Row {
+  seq: number;
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  ts: number;
+  maskApplied: number;
 }
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 20;
 const HISTORY_TTL_MS = 24 * 60 * 60 * 1000;
+const INITIAL_HISTORY_LIMIT = 50;
+const MAX_PAGE_LIMIT = 100;
+
+const rowToMessage = (r: Row): Message => ({
+  id: r.id,
+  senderId: r.senderId,
+  senderName: r.senderName,
+  text: r.text,
+  ts: r.ts,
+  maskApplied: r.maskApplied === 1,
+  seq: Number(r.seq),
+});
 
 /**
  * One ChatRoom Durable Object per room id. Holds the WebSocket connections and
@@ -49,11 +73,17 @@ export class ChatRoom extends DurableObject<Env> {
     const url = new URL(request.url);
     const userId = (url.searchParams.get("user") ?? crypto.randomUUID()).slice(0, 64);
     const name = (url.searchParams.get("name") ?? "익명").slice(0, 32);
+    const clientId = (url.searchParams.get("clientId") ?? crypto.randomUUID()).slice(0, 128);
+
+    // Restore this client's rate-limit window (persisted on the previous close)
+    // so dropping and reopening the socket can't reset the quota.
+    const restored = (await this.ctx.storage.get<number[]>(`rl:${clientId}`)) ?? [];
+    const sends = restored.filter((t) => t > Date.now() - RATE_LIMIT_WINDOW_MS);
 
     const { 0: client, 1: server } = new WebSocketPair();
     // acceptWebSocket (not server.accept()) is what enables hibernation.
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ userId, name, sends: [] } satisfies Attachment);
+    server.serializeAttachment({ userId, name, clientId, sends } satisfies Attachment);
 
     this.sendTo(server, {
       type: "hello",
@@ -110,28 +140,36 @@ export class ChatRoom extends DurableObject<Env> {
         if (!original) return;
         const masked = maskContact(original);
         const maskApplied = original !== masked;
-        const message: Message = {
-          id: crypto.randomUUID(),
-          senderId: att.userId,
-          senderName: att.name,
-          text: masked,
-          ts: now,
-          maskApplied,
-        };
+        const id = crypto.randomUUID();
         this.ctx.storage.sql.exec(
           "INSERT INTO messages (id, senderId, senderName, text, ts, maskApplied) VALUES (?, ?, ?, ?, ?, ?)",
-          message.id,
-          message.senderId,
-          message.senderName,
-          message.text,
-          message.ts,
+          id,
+          att.userId,
+          att.name,
+          masked,
+          now,
           maskApplied ? 1 : 0,
+        );
+        // SQLite rowid is a per-DO monotonic sequence — our total message order.
+        const seq = Number(
+          (this.ctx.storage.sql.exec("SELECT last_insert_rowid() AS s").one() as { s: number }).s,
         );
         // Keep history small on a public demo.
         this.ctx.storage.sql.exec(
           "DELETE FROM messages WHERE ts < ?",
           now - HISTORY_TTL_MS,
         );
+        const message: Message = {
+          id,
+          senderId: att.userId,
+          senderName: att.name,
+          text: masked,
+          ts: now,
+          maskApplied,
+          seq,
+          // Echo the sender's clientMsgId so their optimistic bubble reconciles.
+          clientMsgId: event.clientMsgId,
+        };
         this.broadcast({ type: "message", message });
         break;
       }
@@ -146,13 +184,25 @@ export class ChatRoom extends DurableObject<Env> {
         this.broadcast({ type: "read", messageId: event.messageId, readerId: att.userId }, ws);
         break;
       }
+      case "history_request": {
+        const limit = Math.min(event.limit ?? INITIAL_HISTORY_LIMIT, MAX_PAGE_LIMIT);
+        const { messages, hasMore } = this.olderMessages(event.beforeSeq, limit);
+        this.sendTo(ws, { type: "history_page", messages, hasMore });
+        break;
+      }
     }
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
-    // Clear any lingering typing indicator for the user whose socket just died.
     const att = ws.deserializeAttachment() as Attachment | null;
     if (att) {
+      // Persist the rate-limit window so it survives socket close → reconnect.
+      if (att.clientId && att.sends?.length) {
+        const fresh = att.sends.filter((t) => t > Date.now() - RATE_LIMIT_WINDOW_MS);
+        if (fresh.length) await this.ctx.storage.put(`rl:${att.clientId}`, fresh);
+        else await this.ctx.storage.delete(`rl:${att.clientId}`);
+      }
+      // Clear any lingering typing indicator for the user whose socket just died.
       this.broadcast({
         type: "typing",
         senderId: att.userId,
@@ -167,34 +217,39 @@ export class ChatRoom extends DurableObject<Env> {
     this.broadcastPresence();
   }
 
+  /** Most-recent page for the initial `hello`. */
   private recentMessages(): Message[] {
-    type Row = {
-      id: string;
-      senderId: string;
-      senderName: string;
-      text: string;
-      ts: number;
-      maskApplied: number;
-    };
     // Filter at read time too — cleanup-on-insert misses rooms that go idle
     // long enough for messages to age past the TTL without a new send.
     const cutoff = Date.now() - HISTORY_TTL_MS;
     const rows = this.ctx.storage.sql
       .exec(
-        "SELECT id, senderId, senderName, text, ts, maskApplied FROM messages WHERE ts >= ? ORDER BY ts DESC LIMIT 100",
+        "SELECT rowid AS seq, id, senderId, senderName, text, ts, maskApplied FROM messages WHERE ts >= ? ORDER BY rowid DESC LIMIT ?",
         cutoff,
+        INITIAL_HISTORY_LIMIT,
       )
       .toArray() as unknown as Row[];
-    return rows
-      .map((r) => ({
-        id: r.id,
-        senderId: r.senderId,
-        senderName: r.senderName,
-        text: r.text,
-        ts: r.ts,
-        maskApplied: r.maskApplied === 1,
-      }))
-      .reverse();
+    return rows.map(rowToMessage).reverse();
+  }
+
+  /** An older page for infinite scroll, cursored by seq (rowid). */
+  private olderMessages(
+    beforeSeq: number | undefined,
+    limit: number,
+  ): { messages: Message[]; hasMore: boolean } {
+    const cutoff = Date.now() - HISTORY_TTL_MS;
+    const before = beforeSeq ?? Number.MAX_SAFE_INTEGER;
+    const rows = this.ctx.storage.sql
+      .exec(
+        "SELECT rowid AS seq, id, senderId, senderName, text, ts, maskApplied FROM messages WHERE ts >= ? AND rowid < ? ORDER BY rowid DESC LIMIT ?",
+        cutoff,
+        before,
+        limit + 1, // fetch one extra to know if more remain
+      )
+      .toArray() as unknown as Row[];
+    const hasMore = rows.length > limit;
+    const messages = rows.slice(0, limit).map(rowToMessage).reverse();
+    return { messages, hasMore };
   }
 
   private members(): Member[] {

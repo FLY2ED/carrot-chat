@@ -9,9 +9,10 @@ interface Props {
   messages: Message[];
   selfId: string | null;
   reads: Record<string, string>;
+  onRetry?: (clientMsgId: string) => void;
 }
 
-export function MessageList({ messages, selfId, reads }: Props) {
+export function MessageList({ messages, selfId, reads, onRetry }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,9 +37,14 @@ export function MessageList({ messages, selfId, reads }: Props) {
     >
       {messages.map((m) => {
         const mine = m.senderId === selfId;
-        const read = mine && m.ts <= readWatermark;
+        const read = mine && !m.status && m.ts <= readWatermark;
+        const stateClass =
+          m.status === "sending" ? " msg--sending" : m.status === "failed" ? " msg--failed" : "";
         return (
-          <div key={m.id} className={`msg ${mine ? "msg--mine" : "msg--theirs"}`}>
+          <div
+            key={m.clientMsgId ?? m.id}
+            className={`msg ${mine ? "msg--mine" : "msg--theirs"}${stateClass}`}
+          >
             {!mine && <span className="msg__name">{m.senderName}</span>}
             <div className="msg__bubble">{m.text}</div>
             <span className="msg__meta">
@@ -50,7 +56,17 @@ export function MessageList({ messages, selfId, reads }: Props) {
                   정책 적용
                 </span>
               )}
-              {mine && <span className="msg__read">{read ? "읽음" : "전송됨"}</span>}
+              {mine && m.status === "sending" && <span className="msg__read">전송 중…</span>}
+              {mine && m.status === "failed" && (
+                <button
+                  type="button"
+                  className="msg__retry"
+                  onClick={() => m.clientMsgId && onRetry?.(m.clientMsgId)}
+                >
+                  전송 실패 · 재시도
+                </button>
+              )}
+              {mine && !m.status && <span className="msg__read">{read ? "읽음" : "전송됨"}</span>}
               <time dateTime={new Date(m.ts).toISOString()}>{formatTime(m.ts)}</time>
             </span>
           </div>
