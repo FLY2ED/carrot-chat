@@ -101,15 +101,48 @@ export default function App() {
       <SiteHeader current="demo" />
       <main className="app">
       <header className="app__hero">
+        <span className="app__eyebrow">🥕 재사용 가능한 웹채팅 SDK</span>
         <h1 className="app__title">
-          carrot<span className="app__dot">·</span>chat
+          실시간 채팅을
+          <br />한 패키지로.
         </h1>
         <p className="app__tagline">
-          당근 채팅팀의 <b>재사용 가능한 웹채팅 SDK</b> 미션을 작게 재현한 데모예요.
+          WebSocket 연결·자동 재연결·서버측 정책·런타임 검증을 <b>프레임워크 비종속 코어</b>로 묶은{" "}
+          <code>@naldadev/chat</code>. React·바닐라 어디서든 같은 코어를 씁니다.
         </p>
+        <div className="app__cta">
+          <a className="btn btn--lg" href="/docs.html">
+            SDK 문서 보기 →
+          </a>
+          <a
+            className="btn btn--ghost btn--lg"
+            href="https://github.com/FLY2ED/carrot-chat"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GitHub
+          </a>
+        </div>
+        <div className="app__preview" aria-hidden="true">
+          <div className="app__preview-bar">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <pre>
+            <code>{`npm install @naldadev/chat
+
+import { ChatClient } from "@naldadev/chat";
+
+const chat = new ChatClient({ url });
+chat.on((e) => e.type === "message" && render(e.message));
+chat.connect();
+chat.send({ type: "send", text: "안녕하세요" });`}</code>
+          </pre>
+        </div>
         <p className="app__hint">
-          두 패널은 같은 방에 연결된 독립 클라이언트입니다. 한쪽에서 입력하면 다른 쪽에 실시간으로 도착하고,
-          읽음·타이핑·접속자 수가 동기화돼요.
+          아래 두 패널은 같은 방에 연결된 독립 클라이언트입니다 — 한쪽에서 보내면 실시간으로 도착하고,
+          읽음·타이핑·낙관적 전송이 동기화돼요.
         </p>
       </header>
 

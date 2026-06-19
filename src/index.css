@@ -31,17 +31,83 @@ body {
   min-height: 100%;
 }
 
-/* HERO */
-.app__hero { text-align: center; }
-.app__title { font-size: 2.5rem; font-weight: 800; letter-spacing: -0.025em; margin: 0 0 8px; }
+/* HERO — developer-tool landing style (big type, CTA, code preview) */
+.app__hero {
+  text-align: center;
+  padding: 40px 24px 30px;
+  background: radial-gradient(130% 130% at 50% -10%, #fff3e8 0%, #ffffff 58%);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+}
+.app__eyebrow {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: #fff3ea;
+  padding: 5px 13px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
+.app__title {
+  font-size: clamp(2.3rem, 6.5vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.06;
+  margin: 0 0 16px;
+}
 .app__dot { color: var(--accent); }
-.app__tagline { font-weight: 600; margin: 0 0 6px; font-size: 1rem; }
-.app__tagline b { color: var(--accent); }
+.app__tagline {
+  font-weight: 500;
+  margin: 0 auto 22px;
+  font-size: 1.05rem;
+  max-width: 620px;
+  color: #44474d;
+  line-height: 1.55;
+}
+.app__tagline b { color: var(--ink); font-weight: 700; }
+.app__tagline code {
+  background: #fff3ea;
+  color: var(--accent);
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 0.92em;
+}
+.app__cta { display: flex; gap: 10px; justify-content: center; margin-bottom: 26px; flex-wrap: wrap; }
+.btn--lg { padding: 13px 24px; font-size: 0.96rem; text-decoration: none; display: inline-flex; align-items: center; }
+.app__preview {
+  max-width: 560px;
+  margin: 0 auto 22px;
+  text-align: left;
+  background: #1e2230;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 12px 44px rgba(16, 24, 40, 0.14);
+}
+.app__preview-bar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.app__preview-bar span { width: 11px; height: 11px; border-radius: 50%; background: #3a4256; }
+.app__preview-bar span:nth-child(1) { background: #ff5f57; }
+.app__preview-bar span:nth-child(2) { background: #febc2e; }
+.app__preview-bar span:nth-child(3) { background: #28c840; }
+.app__preview pre { margin: 0; padding: 16px 18px; overflow-x: auto; }
+.app__preview code {
+  color: #e6e8ec;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: none;
+}
 .app__hint {
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.55;
-  max-width: 640px;
+  max-width: 560px;
   margin: 0 auto;
 }
 

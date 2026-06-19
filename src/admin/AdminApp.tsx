@@ -5,9 +5,12 @@ import type { Message } from "../chat-core/types";
 
 const TOKEN_KEY = "carrot-chat:adminToken";
 const POLL_MS = 3000;
+// Demo convenience: the read-only console ships with the demo token prefilled
+// so visitors land straight on the dashboard. Swap to a Wrangler secret in prod.
+const DEMO_TOKEN = "carrot-admin-demo";
 
 export function AdminApp() {
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? "");
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? DEMO_TOKEN);
   const [authed, setAuthed] = useState(false);
   const [stats, setStats] = useState<GlobalStats | null>(null);
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
@@ -42,6 +45,12 @@ export function AdminApp() {
       setError("인증 실패 — 토큰을 확인하세요");
     }
   }, [api, token]);
+
+  // Auto-connect on mount with the prefilled demo token → skip the login screen.
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!authed) return;
