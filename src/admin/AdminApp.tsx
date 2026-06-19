@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SiteHeader } from "../shared/SiteHeader";
 import type { GlobalStats, RoomSummary } from "../../worker/admin-hub";
 import type { Message } from "../chat-core/types";
 
@@ -57,7 +58,9 @@ export function AdminApp() {
 
   if (!authed) {
     return (
-      <main className="admin-login">
+      <>
+        <SiteHeader current="admin" />
+        <main className="admin-login">
         <h1>🥕 carrot-chat 운영 콘솔</h1>
         <p>채팅 운영 모니터링 (읽기 전용). 어드민 토큰을 입력하세요.</p>
         <form
@@ -81,12 +84,15 @@ export function AdminApp() {
             {error}
           </p>
         )}
-      </main>
+        </main>
+      </>
     );
   }
 
   return (
-    <main className="admin">
+    <>
+      <SiteHeader current="admin" />
+      <main className="admin">
       <header className="admin__head">
         <h1>🥕 carrot-chat 운영 콘솔</h1>
         <span className="admin__live" role="status">
@@ -164,7 +170,8 @@ export function AdminApp() {
           )}
         </aside>
       </section>
-    </main>
+      </main>
+    </>
   );
 }
 
