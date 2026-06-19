@@ -9,8 +9,13 @@ const PATTERNS: readonly RegExp[] = [
   /\d{2,4}[-.\s]\d{3,4}[-.\s]\d{4}/g, // generic phone with separators
 ];
 
-export function maskContact(text: string): string {
-  return PATTERNS.reduce((acc, re) => acc.replace(re, "[비공개]"), text);
+export function maskContact(
+  text: string,
+  extraPatterns: readonly RegExp[] = [],
+): string {
+  // Built-in patterns (phone/email) plus any domain-specific ones the caller
+  // adds — e.g. academy names (artdata) or KakaoTalk handles (off-platform deals).
+  return [...PATTERNS, ...extraPatterns].reduce((acc, re) => acc.replace(re, "[비공개]"), text);
 }
 
 // Runtime schema for events the client sends to the server. The worker calls
