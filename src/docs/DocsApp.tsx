@@ -9,6 +9,8 @@ const SECTIONS = [
   { id: "api", title: "Public API" },
   { id: "transport", title: "Custom Transport" },
   { id: "policy", title: "정책 · 검증" },
+  { id: "auth", title: "인증" },
+  { id: "assistant", title: "AI 어시스턴트" },
   { id: "links", title: "링크" },
 ] as const;
 
@@ -261,6 +263,61 @@ maskContact("내 번호 010-1234-5678 로 연락");
 const parsed = ServerEventSchema.safeParse(JSON.parse(raw));
 if (!parsed.success) return; // 변조/손상 프레임 폐기`}
           />
+        </section>
+
+        <section id="auth">
+          <h2>인증</h2>
+          <p>
+            데모는 <code>?user=&amp;name=</code> 쿼리스트링으로 식별하지만, 실서비스는 WebSocket
+            핸드셰이크에 토큰을 실어 보냅니다. 브라우저 WebSocket은 <code>Authorization</code> 헤더를
+            못 붙이므로 쿼리스트링·서브프로토콜·쿠키·첫 메시지 중 하나로 JWT를 전달하고, 서버가 검증한
+            뒤 연결을 수락합니다.
+          </p>
+          <CodeBlock
+            code={`// 연결 시 토큰 전달 (서버가 검증 후 acceptWebSocket)
+let chat = new ChatClient({
+  url: \`wss://host/api/room/\${roomId}/ws?token=\${jwt}\`,
+});
+
+// 토큰 만료 대비: 갱신 후 소켓 재연결 (refreshGate 패턴)
+window.addEventListener("auth-refreshed", (e) => {
+  chat.close();
+  chat = new ChatClient({ url: withToken(e.detail.token) });
+  chat.connect();
+});`}
+          />
+          <p className="docs__note">
+            동시 갱신을 한 번으로 합치고 소켓·HTTP에 새 토큰을 전파하는 <b>refreshGate</b> 패턴은
+            실서비스 artdata의 Socket.io 채팅에서 실제로 운영한 방식입니다.
+          </p>
+        </section>
+
+        <section id="assistant">
+          <h2>AI 어시스턴트 (tool-use)</h2>
+          <p>
+            채팅에 LLM 어시스턴트를 붙이려면 채팅 코어는 그대로 두고, 서버가 특정 메시지
+            (<code>@assistant</code> 멘션 등)를 가로채 LLM을 <b>tool-use</b>로 호출한 뒤 그 답을 봇
+            메시지로 broadcast하면 됩니다.
+          </p>
+          <CodeBlock
+            code={`// worker: @assistant 멘션을 LLM tool-use로 처리
+if (text.startsWith("@assistant")) {
+  let res = await gemini.generate({
+    contents: history,
+    tools: [{ functionDeclarations: TOOLS }], // 동적 도구 호출
+  });
+  // 도구 호출 루프: functionCalls() → 실행 → 결과 회신 → 최종 답
+  while (res.functionCalls()?.length) {
+    res = await runToolsAndContinue(res);
+  }
+  this.broadcast({ type: "message", message: botMessage(res.text()) });
+}`}
+          />
+          <p className="docs__note">
+            artdata의 미대 입시 챗봇이 이 구조예요 — Gemini가 14개 도구(점수 환산·합격 사례 조회 등)를
+            동적으로 호출하고 응답을 SSE로 스트리밍합니다. <code>GEMINI_API_KEY</code>를 Wrangler
+            secret으로 설정하면 같은 패턴을 이 SDK 위에 얹을 수 있습니다.
+          </p>
         </section>
 
         <section id="links">
