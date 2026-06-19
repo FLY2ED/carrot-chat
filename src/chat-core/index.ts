@@ -1,4 +1,4 @@
-// Public API of the framework-agnostic chat SDK (publishable as @carrot/chat-core).
+// Public API of the framework-agnostic chat SDK (publishable as @naldadev/chat).
 //
 // This barrel IS the SDK's contract: consumers (the React bindings, the Worker)
 // import only from here, never from internal files. That keeps the surface small

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatPanel, type ChatPanelApi } from "./react/components/ChatPanel";
+import { SiteHeader } from "./shared/SiteHeader";
 
 const ROOM_KEY = "carrot-chat:room";
 const NICK_ALICE_KEY = "carrot-chat:alice";
@@ -96,7 +97,9 @@ export default function App() {
   }, []);
 
   return (
-    <main className="app">
+    <>
+      <SiteHeader current="demo" />
+      <main className="app">
       <header className="app__hero">
         <h1 className="app__title">
           carrot<span className="app__dot">·</span>chat
@@ -203,10 +206,13 @@ export default function App() {
           github.com/FLY2ED/carrot-chat
         </a>
         <span> · </span>
+        <a href="/docs.html">SDK 문서</a>
+        <span> · </span>
         <a href="/admin.html">운영 콘솔</a>
         <span> · 박성재 · NALDA</span>
       </footer>
-    </main>
+      </main>
+    </>
   );
 }
 

@@ -1,4 +1,4 @@
-# @carrot/chat-core
+# @naldadev/chat
 
 The framework-agnostic core of carrot-chat: it owns the connection (transport,
 auto-reconnect with exponential backoff + jitter, heartbeat), validates every
@@ -9,7 +9,7 @@ Worker is another.
 ## Quickstart
 
 ```ts
-import { ChatClient } from "@carrot/chat-core";
+import { ChatClient } from "@naldadev/chat";
 
 const client = new ChatClient({ url: "wss://example.com/api/room/lobby/ws" });
 
@@ -28,7 +28,7 @@ client.close();
 
 ## Public API
 
-The `index.ts` barrel **is** the contract — import only from `@carrot/chat-core`,
+The `index.ts` barrel **is** the contract — import only from `@naldadev/chat`,
 never from internal files. Internals (`reconnect.ts` backoff policy, the React
 store wiring) can change without a breaking release.
 
@@ -47,7 +47,7 @@ store wiring) can change without a breaking release.
 inject a different wire (or a fake for tests):
 
 ```ts
-import { ChatClient, type Transport } from "@carrot/chat-core";
+import { ChatClient, type Transport } from "@naldadev/chat";
 
 const sseTransport = (url: string): Transport => ({
   /* connect/send/on/close/state mapping onto an EventSource */
@@ -67,7 +67,7 @@ The only additions needed are package metadata + a build step:
 ```jsonc
 // package.json
 {
-  "name": "@carrot/chat-core",
+  "name": "@naldadev/chat",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -83,5 +83,5 @@ The only additions needed are package metadata + a build step:
 `zod` is a **peer** dependency so the consumer, the React bindings, and the
 Worker all share one Zod instance (otherwise `discriminatedUnion` parsing and
 `instanceof ZodError` break). In a pnpm workspace, pin it via `catalog:`. The
-demo app and the Worker would then depend on `@carrot/chat-core` by name instead
+demo app and the Worker would then depend on `@naldadev/chat` by name instead
 of the relative `../chat-core` path — no source changes inside this folder.

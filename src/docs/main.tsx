@@ -1,11 +1,11 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { AdminApp } from "./AdminApp";
-import "./admin.css";
+import { DocsApp } from "./DocsApp";
+import "./docs.css";
 import "../shared/site-header.css";
 
-createRoot(document.getElementById("admin-root")!).render(
+createRoot(document.getElementById("docs-root")!).render(
   <StrictMode>
-    <AdminApp />
+    <DocsApp />
   </StrictMode>,
 );
