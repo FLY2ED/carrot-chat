@@ -1,4 +1,7 @@
 import { nextDelay, withJitter } from "./reconnect";
+import { ServerEventSchema } from "./protocol";
+import { webSocketTransport } from "./transport";
+import type { Transport, TransportFactory } from "./transport";
 import type { ClientEvent, ConnectionStatus, ServerEvent } from "./types";
 
 type EventListener = (event: ServerEvent) => void;
@@ -6,20 +9,33 @@ type StatusListener = (status: ConnectionStatus) => void;
 
 export interface ChatClientOptions {
   url: string;
-  /** Injectable for tests (defaults to the global WebSocket). */
+  /** @deprecated Prefer `transport`. Injectable WebSocket constructor for tests. */
   WebSocketCtor?: typeof WebSocket;
+  /** Transport factory; defaults to a WebSocket transport. Inject for tests/SSE. */
+  transport?: TransportFactory;
   maxReconnectAttempts?: number;
   heartbeatMs?: number;
   rng?: () => number;
+  /** Called when a server frame fails schema validation (default: silently dropped). */
+  onMalformed?: (raw: unknown, error: unknown) => void;
+}
+
+interface ResolvedOptions {
+  url: string;
+  transport: TransportFactory;
+  maxReconnectAttempts: number;
+  heartbeatMs: number;
+  rng: () => number;
+  onMalformed?: (raw: unknown, error: unknown) => void;
 }
 
 /**
- * Framework-agnostic chat connection: owns a WebSocket, auto-reconnects with
+ * Framework-agnostic chat connection: owns a Transport, auto-reconnects with
  * exponential backoff + jitter, keeps the connection warm with heartbeats, and
- * fans typed events out to subscribers. No React, no DOM assumptions.
+ * fans schema-validated events out to subscribers. No React, no DOM assumptions.
  */
 export class ChatClient {
-  private ws: WebSocket | null = null;
+  private transport: Transport | null = null;
   private status: ConnectionStatus = "closed";
   private attempt = 0;
   private intentionalClose = false;
@@ -28,15 +44,19 @@ export class ChatClient {
   private nextReconnectDelayFloorMs: number | null = null;
   private readonly listeners = new Set<EventListener>();
   private readonly statusListeners = new Set<StatusListener>();
-  private readonly opts: Required<ChatClientOptions>;
+  private readonly opts: ResolvedOptions;
 
   constructor(options: ChatClientOptions) {
+    const transport: TransportFactory =
+      options.transport ??
+      ((url) => webSocketTransport(url, { WebSocketCtor: options.WebSocketCtor }));
     this.opts = {
-      WebSocketCtor: globalThis.WebSocket,
-      maxReconnectAttempts: Number.POSITIVE_INFINITY,
-      heartbeatMs: 25_000,
-      rng: Math.random,
-      ...options,
+      url: options.url,
+      transport,
+      maxReconnectAttempts: options.maxReconnectAttempts ?? Number.POSITIVE_INFINITY,
+      heartbeatMs: options.heartbeatMs ?? 25_000,
+      rng: options.rng ?? Math.random,
+      onMalformed: options.onMalformed,
     };
   }
 
@@ -51,29 +71,34 @@ export class ChatClient {
 
   private open(): void {
     this.setStatus(this.attempt === 0 ? "connecting" : "reconnecting");
-    const ws = new this.opts.WebSocketCtor(this.opts.url);
-    this.ws = ws;
+    const transport = this.opts.transport(this.opts.url);
+    this.transport = transport;
 
-    ws.addEventListener("open", () => {
+    transport.on("open", () => {
       this.attempt = 0;
       this.setStatus("open");
       this.startHeartbeat();
     });
 
-    ws.addEventListener("message", (ev: MessageEvent) => {
-      const raw = typeof ev.data === "string" ? ev.data : "";
-      if (!raw || raw === "pong") return;
-      let event: ServerEvent;
+    transport.on("message", (raw) => {
+      if (!raw || raw === "pong") return; // ignore heartbeat pongs / empty frames
+      let json: unknown;
       try {
-        event = JSON.parse(raw);
+        json = JSON.parse(raw);
       } catch {
         return;
       }
-      for (const listener of this.listeners) listener(event);
+      // Trust boundary: validate every frame before it reaches subscribers.
+      const parsed = ServerEventSchema.safeParse(json);
+      if (!parsed.success) {
+        this.opts.onMalformed?.(json, parsed.error);
+        return;
+      }
+      for (const listener of this.listeners) listener(parsed.data);
     });
 
-    ws.addEventListener("close", () => {
-      if (ws !== this.ws) return;
+    transport.on("close", () => {
+      if (transport !== this.transport) return; // stale socket — ignore
       this.stopHeartbeat();
       if (this.intentionalClose) {
         this.setStatus("closed");
@@ -82,13 +107,11 @@ export class ChatClient {
       this.scheduleReconnect();
     });
 
-    ws.addEventListener("error", () => {
-      try {
-        ws.close();
-      } catch {
-        /* noop */
-      }
+    transport.on("error", () => {
+      transport.close();
     });
+
+    transport.connect();
   }
 
   private scheduleReconnect(): void {
@@ -113,24 +136,20 @@ export class ChatClient {
   }
 
   send(event: ClientEvent): void {
-    if (this.ws && this.status === "open") {
-      this.ws.send(JSON.stringify(event));
+    if (this.transport && this.status === "open") {
+      this.transport.send(JSON.stringify(event));
     }
   }
 
   /**
-   * Drop the underlying WebSocket as if the network died. The close handler
+   * Drop the underlying transport as if the network died. The close handler
    * sees a non-intentional close and starts the normal reconnect cycle —
    * useful for the demo "재연결 시뮬레이션" button.
    */
   simulateDisconnect(options: { minReconnectDelayMs?: number } = {}): void {
-    if (this.ws) {
+    if (this.transport) {
       this.nextReconnectDelayFloorMs = Math.max(0, options.minReconnectDelayMs ?? 0);
-      try {
-        this.ws.close(4000, "simulated");
-      } catch {
-        /* noop */
-      }
+      this.transport.close(4000, "simulated");
       this.stopHeartbeat();
       this.scheduleReconnect();
     }
@@ -152,18 +171,14 @@ export class ChatClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.nextReconnectDelayFloorMs = null;
     this.stopHeartbeat();
-    try {
-      this.ws?.close(1000, "client closed");
-    } catch {
-      /* noop */
-    }
+    this.transport?.close(1000, "client closed");
     this.setStatus("closed");
   }
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
-      if (this.ws && this.status === "open") this.ws.send("ping");
+      if (this.transport && this.status === "open") this.transport.send("ping");
     }, this.opts.heartbeatMs);
   }
 

@@ -63,3 +63,60 @@ test("reconnect simulation updates Alice status before recovering", async ({ pag
   await expect(alice.getByText("실시간 연결됨")).toBeVisible({ timeout: 5000 });
   await expect(input).toBeEnabled();
 });
+
+test("optimistic send shows immediately and reconciles without a duplicate", async ({
+  page,
+}) => {
+  const room = `e2e-optimistic-${Date.now()}`;
+  await page.goto(`/?room=${room}`);
+
+  const alice = page.locator('section[aria-label="앨리스 채팅 패널"]');
+  await expect(alice.getByText("실시간 연결됨")).toBeVisible();
+
+  const text = "낙관적 전송 테스트";
+  await alice.getByLabel("메시지 입력").fill(text);
+  await alice.getByRole("button", { name: "보내기" }).click();
+
+  // Renders immediately (optimistic) — exactly once.
+  await expect(alice.getByText(text)).toHaveCount(1);
+  // After the server echo reconciles by clientMsgId, still exactly one (no dup).
+  await page.waitForTimeout(500);
+  await expect(alice.getByText(text)).toHaveCount(1);
+});
+
+test("admin console reflects room activity + mask rate, and rejects bad tokens", async ({
+  page,
+  request,
+}) => {
+  const room = `e2e-admin-${Date.now()}`;
+  await page.goto(`/?room=${room}`);
+
+  const alice = page.locator('section[aria-label="앨리스 채팅 패널"]');
+  await expect(alice.getByText("실시간 연결됨")).toBeVisible();
+
+  // A masked message so the admin mask-rate counter moves.
+  await alice.getByLabel("메시지 입력").fill("연락처 010-1234-5678 입니다");
+  await alice.getByRole("button", { name: "보내기" }).click();
+  await expect(
+    page.locator('section[aria-label="바다 채팅 패널"]').getByText("[비공개]"),
+  ).toBeVisible();
+
+  // Token-gated admin API reflects the activity (fire-and-forget report settles).
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get("/api/admin/stats", {
+          headers: { Authorization: "Bearer carrot-admin-demo" },
+        });
+        if (!res.ok()) return -1;
+        const stats = await res.json();
+        return stats.totalMasked as number;
+      },
+      { timeout: 5000 },
+    )
+    .toBeGreaterThan(0);
+
+  // No token → 401.
+  const unauth = await request.get("/api/admin/stats");
+  expect(unauth.status()).toBe(401);
+});

@@ -58,6 +58,10 @@ worker/          ← Cloudflare Worker + Durable Object 백엔드
 - **자동 재연결** — 지수 백오프 + 지터, 의도적 종료와 비정상 종료 구분
 - **하트비트** — `setWebSocketAutoResponse(ping/pong)`로 DO를 깨우지 않고 연결 유지
 - **정책 제어** — 전화/이메일 등 연락처를 **서버측에서** 자동 마스킹(외부 거래 차단)
+- **낙관적 전송** — 보내는 즉시 `sending` 표시 → 서버 echo로 `sent` 교체(clientMsgId 매칭), 실패 시 재시도
+- **메시지 순서 · 멀티탭** — SQLite rowid 기반 `seq`로 전순서 보장, clientId로 탭/재연결 중복 제거
+- **무한 스크롤 · 가상화** — `@tanstack/react-virtual` 윈도잉 + 위로 스크롤 시 이전 페이지 로드
+- **운영 콘솔** — 별도 어드민(`/admin.html`)에서 활성 방·마스킹률·rate limit·재연결을 모니터링(읽기 전용, 토큰)
 - **접근성** — 대화 로그 `role="log"` + `aria-live`, 라벨링된 입력/버튼
 - **하이버네이션** — 유휴 방은 메모리에서 내려가도 SQLite 히스토리로 복구
 
@@ -89,14 +93,15 @@ npm run build      # 프로덕션 빌드 (dist/client + worker)
 npm run deploy     # Cloudflare 배포 (wrangler)
 ```
 
-검증 기록(2026-05-28):
+검증 기록(2026-06-18):
 
 - `npm run typecheck` 통과
-- `npm test` 통과: 4 files, 14 tests
-- `npm run build` 통과
-- `npm run test:e2e` 통과: Chromium 2 tests
+- `npm test` 통과: 5 files, 22 tests
+- `npm run build` 통과 (데모 + 어드민 멀티 엔트리 + Worker)
+- `npm run test:e2e` 통과: Chromium 5 tests (동기화·마스킹·재연결·낙관적·어드민)
 
 ## 의도적으로 단순하게 둔 부분
 
 - 인증은 데모용으로 쿼리스트링 사용자 식별(`?user=&name=`). 실제 서비스라면 JWT 핸드셰이크로 교체.
-- 메시지 가상화/무한 스크롤은 범위 밖(최근 100개 로드). 메시지 폭증 시 윈도잉 추가 지점.
+- 미디어/파일 메시지는 범위 밖(텍스트만). R2 같은 객체 저장소와 결합하는 지점.
+- 어드민 인증은 공유 토큰(데모). 프로덕션이면 SSO·역할 기반으로 승격.

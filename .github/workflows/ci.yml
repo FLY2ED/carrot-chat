@@ -1,0 +1,26 @@
+name: CI
+
+# Fast gate on every PR and main push: typecheck + unit tests + build.
+# E2E (slow, boots workerd) lives in e2e.yml so this stays under ~2 min.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

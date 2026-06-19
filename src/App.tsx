@@ -112,20 +112,20 @@ export default function App() {
 
       <div className="archstrip" aria-label="아키텍처 요약">
         <div className="arch">
-          <b>chat-core</b>
-          <span>프레임워크 비종속 SDK · 자동 재연결 · 하트비트 · 이벤트 모델</span>
+          <b>chat-core SDK</b>
+          <span>프레임워크 비종속 · Transport 어댑터 · 자동 재연결 · Zod 검증</span>
         </div>
         <div className="arch">
           <b>React + Zustand</b>
-          <span>인스턴스별 store · 접근성 <code>role=log</code>/<code>aria-live</code></span>
+          <span>낙관적 전송 · 가상 스크롤 · 접근성 <code>role=log</code>/<code>aria-live</code></span>
         </div>
         <div className="arch">
           <b>Durable Object</b>
-          <span>WebSocket Hibernation · SQLite 히스토리 · 서버측 정책 제어 + rate limit</span>
+          <span>Hibernation · SQLite seq 순서 · 서버 정책 + rate limit · 어드민 계측</span>
         </div>
         <div className="arch">
           <b>Tested</b>
-          <span>Vitest 14 · Playwright E2E 2 · typecheck/build 통과</span>
+          <span>Vitest 22 · Playwright E2E 5 · typecheck/build 통과</span>
         </div>
       </div>
 
@@ -202,6 +202,8 @@ export default function App() {
         <a href="https://github.com/FLY2ED/carrot-chat" target="_blank" rel="noreferrer">
           github.com/FLY2ED/carrot-chat
         </a>
+        <span> · </span>
+        <a href="/admin.html">운영 콘솔</a>
         <span> · 박성재 · NALDA</span>
       </footer>
     </main>

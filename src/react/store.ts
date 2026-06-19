@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { ConnectionStatus, Member, Message } from "../chat-core/types";
+import type { ConnectionStatus, Member, Message } from "../chat-core";
 
 export interface ChatState {
   status: ConnectionStatus;
@@ -13,6 +13,10 @@ export interface ChatState {
   reads: Record<string, string>;
   /** Most recent system-event notice (rate-limit, validation, etc.). Auto-clears. */
   notice: string | null;
+  /** Whether older history pages remain above the current window. */
+  hasMoreHistory: boolean;
+  /** Guards against overlapping history_request round-trips. */
+  loadingOlder: boolean;
 }
 
 export const initialChatState: ChatState = {
@@ -24,6 +28,8 @@ export const initialChatState: ChatState = {
   typing: {},
   reads: {},
   notice: null,
+  hasMoreHistory: false,
+  loadingOlder: false,
 };
 
 /** A fresh store per room instance (one per ChatPanel / connection). */

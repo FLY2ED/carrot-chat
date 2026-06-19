@@ -1,11 +1,25 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useStore } from "zustand";
-import { ChatClient } from "../chat-core/client";
+import { ChatClient } from "../chat-core";
 import { createChatStore } from "./store";
+import { getClientId } from "./clientId";
+import {
+  applyOptimistic,
+  markFailed,
+  mergeHistory,
+  prependPage,
+  reconcileEcho,
+} from "./messageReducer";
+import type { Message } from "../chat-core";
 
-export function buildWsUrl(roomId: string, user: string, name: string): string {
+export function buildWsUrl(
+  roomId: string,
+  user: string,
+  name: string,
+  clientId: string,
+): string {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const qs = new URLSearchParams({ user, name }).toString();
+  const qs = new URLSearchParams({ user, name, clientId }).toString();
   return `${proto}//${location.host}/api/room/${encodeURIComponent(roomId)}/ws?${qs}`;
 }
 
@@ -22,39 +36,59 @@ const NOTICE_FOR = (reason: string, detail?: string): string => {
 
 const NOTICE_AUTOCLEAR_MS = 3000;
 const RECONNECT_SIM_VISIBLE_MS = 1500;
+const SEND_TIMEOUT_MS = 8000;
+const HISTORY_PAGE_SIZE = 50;
 
 /**
  * Binds a {@link ChatClient} to a per-instance Zustand store and exposes the
- * reactive state plus stable action callbacks. The SDK does the work; React
- * just renders it.
+ * reactive state plus stable action callbacks. The SDK does the transport work;
+ * React renders it. Optimistic sends, reconnect-safe history merge, and infinite
+ * scroll are handled here via the pure {@link messageReducer} helpers.
  */
 export function useChatRoom(roomId: string, user: string, name: string) {
   const storeRef = useRef(createChatStore());
   const store = storeRef.current;
   const clientRef = useRef<ChatClient | null>(null);
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sendTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const clientId = useMemo(() => getClientId(), []);
 
   useEffect(() => {
-    const client = new ChatClient({ url: buildWsUrl(roomId, user, name) });
+    const sendTimers = sendTimersRef.current;
+    const client = new ChatClient({ url: buildWsUrl(roomId, user, name, clientId) });
     clientRef.current = client;
 
     const offStatus = client.onStatus((status) => store.setState({ status }));
     const off = client.on((event) => {
       switch (event.type) {
         case "hello":
-          store.setState({
+          store.setState((s) => ({
             selfId: event.selfId,
             selfName: event.selfName,
-            messages: event.history,
+            // Merge (not replace) so a reconnect keeps in-flight optimistic sends.
+            messages: mergeHistory(s.messages, event.history),
             members: event.members,
-          });
+            hasMoreHistory: event.history.length >= HISTORY_PAGE_SIZE,
+          }));
           break;
-        case "message":
-          store.setState((s) =>
-            s.messages.some((m) => m.id === event.message.id)
-              ? s
-              : { messages: [...s.messages, event.message] },
-          );
+        case "message": {
+          const { clientMsgId } = event.message;
+          if (clientMsgId) {
+            const timer = sendTimers.get(clientMsgId);
+            if (timer) {
+              clearTimeout(timer);
+              sendTimers.delete(clientMsgId);
+            }
+          }
+          store.setState((s) => ({ messages: reconcileEcho(s.messages, event.message) }));
+          break;
+        }
+        case "history_page":
+          store.setState((s) => ({
+            messages: prependPage(s.messages, event.messages),
+            hasMoreHistory: event.hasMore,
+            loadingOlder: false,
+          }));
           break;
         case "presence":
           store.setState({ members: event.members });
@@ -74,7 +108,6 @@ export function useChatRoom(roomId: string, user: string, name: string) {
           break;
         case "system":
           store.setState({ notice: NOTICE_FOR(event.reason, event.detail) });
-          // Replace any in-flight clear so the newest notice survives long enough.
           if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
           noticeTimerRef.current = setTimeout(() => {
             store.setState({ notice: null });
@@ -93,14 +126,62 @@ export function useChatRoom(roomId: string, user: string, name: string) {
         clearTimeout(noticeTimerRef.current);
         noticeTimerRef.current = null;
       }
+      for (const timer of sendTimers.values()) clearTimeout(timer);
+      sendTimers.clear();
     };
-  }, [roomId, user, name, store]);
+  }, [roomId, user, name, clientId, store]);
 
   const state = useStore(store);
 
-  const actions = useMemo(
-    () => ({
-      sendMessage: (text: string) => clientRef.current?.send({ type: "send", text }),
+  const actions = useMemo(() => {
+    const dispatchSend = (text: string, clientMsgId: string) => {
+      clientRef.current?.send({ type: "send", text, clientMsgId });
+      const timer = setTimeout(() => {
+        store.setState((s) => ({ messages: markFailed(s.messages, clientMsgId) }));
+        sendTimersRef.current.delete(clientMsgId);
+      }, SEND_TIMEOUT_MS);
+      sendTimersRef.current.set(clientMsgId, timer);
+    };
+
+    return {
+      sendMessage: (text: string) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const clientMsgId = crypto.randomUUID();
+        const { selfId, selfName } = store.getState();
+        const optimistic: Message = {
+          id: clientMsgId,
+          senderId: selfId ?? "me",
+          senderName: selfName ?? "나",
+          text: trimmed,
+          ts: Date.now(),
+          status: "sending",
+          clientMsgId,
+        };
+        store.setState((s) => ({ messages: applyOptimistic(s.messages, optimistic) }));
+        dispatchSend(trimmed, clientMsgId);
+      },
+      retry: (clientMsgId: string) => {
+        const target = store.getState().messages.find((m) => m.clientMsgId === clientMsgId);
+        if (!target || target.status !== "failed") return;
+        store.setState((s) => ({
+          messages: s.messages.map((m) =>
+            m.clientMsgId === clientMsgId ? { ...m, status: "sending" } : m,
+          ),
+        }));
+        dispatchSend(target.text, clientMsgId);
+      },
+      loadOlder: () => {
+        const s = store.getState();
+        if (s.loadingOlder || !s.hasMoreHistory) return;
+        const oldest = s.messages.find((m) => m.seq !== undefined);
+        store.setState({ loadingOlder: true });
+        clientRef.current?.send({
+          type: "history_request",
+          beforeSeq: oldest?.seq,
+          limit: HISTORY_PAGE_SIZE,
+        });
+      },
       setTyping: (isTyping: boolean) =>
         clientRef.current?.send({ type: "typing", isTyping }),
       markRead: (messageId: string) =>
@@ -109,9 +190,8 @@ export function useChatRoom(roomId: string, user: string, name: string) {
         clientRef.current?.simulateDisconnect({
           minReconnectDelayMs: RECONNECT_SIM_VISIBLE_MS,
         }),
-    }),
-    [],
-  );
+    };
+  }, [store]);
 
   return { ...state, ...actions };
 }

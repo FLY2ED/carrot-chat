@@ -12,4 +12,18 @@ export default defineConfig({
   plugins: [react(), cloudflare()],
   server: { port: 5180, strictPort: true },
   preview: { port: 5180, strictPort: true },
+  // Multi-page on the CLIENT environment only (the chat demo + the operations
+  // console as separate entries) — the Worker environment keeps its own entry.
+  environments: {
+    client: {
+      build: {
+        rollupOptions: {
+          input: {
+            main: `${import.meta.dirname}/index.html`,
+            admin: `${import.meta.dirname}/admin.html`,
+          },
+        },
+      },
+    },
+  },
 });

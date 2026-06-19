@@ -1,0 +1,127 @@
+:root {
+  --accent: #ff6f0f;
+  --ink: #1a1c1f;
+  --muted: #6b7280;
+  --line: #e6e8ec;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background: #f6f7f9;
+}
+
+.admin-login {
+  max-width: 420px;
+  margin: 12vh auto;
+  padding: 28px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  text-align: center;
+}
+.admin-login h1 { font-size: 1.3rem; margin: 0 0 8px; }
+.admin-login p { color: var(--muted); font-size: 0.9rem; margin: 0 0 18px; }
+.admin-login form { display: flex; gap: 8px; }
+.admin-login input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+.admin-login button {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.admin-error { color: #e5484d; margin-top: 12px; font-size: 0.85rem; }
+
+.admin { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+.admin__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.admin__head h1 { font-size: 1.25rem; margin: 0; }
+.admin__live { color: var(--accent); font-size: 0.78rem; font-weight: 700; }
+
+.admin__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stat-card__value { font-size: 1.6rem; font-weight: 800; }
+.stat-card__label { font-size: 0.78rem; color: var(--muted); }
+.stat-card__sub { font-size: 0.7rem; color: var(--muted); }
+
+.admin__body {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.admin__rooms {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 0.85rem;
+}
+.admin__rooms th,
+.admin__rooms td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+.admin__rooms th {
+  background: #fafbfc;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.admin__rooms tbody tr { cursor: pointer; }
+.admin__rooms tbody tr:hover { background: #fff7f0; }
+.admin__rooms tr.is-selected { background: #fff3ea; }
+.admin__roomid { font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.admin__empty { color: var(--muted); text-align: center; padding: 20px; }
+
+.admin__detail {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  min-height: 200px;
+}
+.admin__detail h2 { font-size: 0.95rem; margin: 0 0 10px; }
+.admin__messages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+.admin__messages li { padding: 6px 8px; background: #fafbfc; border-radius: 8px; }
+.admin__masked { color: var(--accent); font-size: 0.68rem; font-weight: 700; }
+.admin__hint { color: var(--muted); font-size: 0.85rem; }
+
+@media (max-width: 720px) {
+  .admin__body { grid-template-columns: 1fr; }
+}

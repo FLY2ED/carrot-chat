@@ -60,7 +60,15 @@ export function ChatPanel({ roomId, user, name, accent, onApi }: Props) {
           <StatusBadge status={room.status} />
         </span>
       </header>
-      <MessageList messages={room.messages} selfId={room.selfId} reads={room.reads} />
+      <MessageList
+        messages={room.messages}
+        selfId={room.selfId}
+        reads={room.reads}
+        onRetry={room.retry}
+        onLoadOlder={room.loadOlder}
+        hasMoreHistory={room.hasMoreHistory}
+        loadingOlder={room.loadingOlder}
+      />
       <TypingIndicator names={typingNames} />
       {room.notice && (
         <div className="notice" role="status" aria-live="polite">
