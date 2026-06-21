@@ -278,6 +278,95 @@ test("inbox notification: a live arrival pops a toast and updates the unread tab
   await inbox.close();
 });
 
+test("offline delivery: a member disconnected at send time still accrues inbox unread", async ({
+  page,
+}) => {
+  const room = `e2e-offline-${Date.now()}`;
+  await page.goto("/"); // page origin to open WebSockets from
+
+  const unread = await page.evaluate(
+    async ({ room }) => {
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const H = location.host;
+      const open = (url: string, onMsg?: (m: { type: string; rooms?: { roomId: string; unread: number }[] }) => void) =>
+        new Promise<WebSocket>((res) => {
+          const ws = new WebSocket(url);
+          ws.onopen = () => res(ws);
+          if (onMsg) ws.onmessage = (e) => onMsg(JSON.parse(e.data as string));
+        });
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+      // Bob joins (recorded in durable membership) then disconnects → OFFLINE.
+      const bob = await open(`${proto}//${H}/api/room/${room}/ws?user=bob&name=bob`);
+      await wait(250);
+      bob.close();
+      await wait(250);
+
+      // Alice joins and sends while Bob is offline.
+      const alice = await open(`${proto}//${H}/api/room/${room}/ws?user=alice&name=alice`);
+      await wait(250);
+      alice.send(JSON.stringify({ type: "send", text: "offline-test", clientMsgId: "off1" }));
+      await wait(600);
+
+      // Bob's inbox shows this room with unread ≥ 1 despite being offline at send time.
+      let unread = -1;
+      await open(`${proto}//${H}/api/inbox/ws?user=bob&name=bob`, (m) => {
+        if (m.type === "inbox") {
+          const e = m.rooms?.find((r) => r.roomId === room);
+          if (e) unread = e.unread;
+        }
+      });
+      await wait(500);
+      alice.close();
+      return unread;
+    },
+    { room },
+  );
+
+  expect(unread).toBeGreaterThanOrEqual(1);
+});
+
+test("global notification bell surfaces unread on other pages after the inbox identity is set", async ({
+  page,
+}) => {
+  // Entering the inbox as Bob persists the identity in localStorage.
+  await page.goto(`/inbox.html?user=bob&name=${encodeURIComponent("바다")}`);
+  await expect(page.getByText("실시간 연결됨")).toBeVisible();
+
+  // Create an unread for Bob in a fresh room (offline delivery is fine here).
+  const room = `e2e-bell-${Date.now()}`;
+  await page.evaluate(
+    async ({ room }) => {
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const H = location.host;
+      const open = (u: string) =>
+        new Promise<WebSocket>((res) => {
+          const ws = new WebSocket(u);
+          ws.onopen = () => res(ws);
+        });
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+      const bob = await open(`${proto}//${H}/api/room/${room}/ws?user=bob&name=bob`);
+      await wait(200);
+      bob.close();
+      await wait(200);
+      const alice = await open(`${proto}//${H}/api/room/${room}/ws?user=alice&name=alice`);
+      await wait(200);
+      alice.send(JSON.stringify({ type: "send", text: "bell-test", clientMsgId: "bell1" }));
+      await wait(500);
+      alice.close();
+    },
+    { room },
+  );
+
+  // On the demo page the global bell (reading the stored identity) shows a badge.
+  await page.goto("/");
+  await expect(page.locator(".site-bell__badge")).toBeVisible();
+
+  // Opening the bell lists the unread room.
+  await page.locator(".site-bell").click();
+  await expect(page.locator(".site-bell__menu", { hasText: room })).toBeVisible();
+});
+
 test("admin console reflects room activity + mask rate, and rejects bad tokens", async ({
   page,
   request,
