@@ -10,7 +10,7 @@ import {
   prependPage,
   reconcileEcho,
 } from "./messageReducer";
-import type { Message } from "../chat-core";
+import type { Card, Media, Message } from "../chat-core";
 
 export function buildWsUrl(
   roomId: string,
@@ -182,6 +182,18 @@ export function useChatRoom(roomId: string, user: string, name: string) {
           limit: HISTORY_PAGE_SIZE,
         });
       },
+      // Rich message: image/file/system/card. The server is authoritative, so we
+      // let the echo render it (no optimistic bubble needed for cards/system).
+      compose: (input: {
+        kind: "image" | "file" | "system" | "card";
+        text?: string;
+        media?: Media;
+        card?: Card;
+      }) =>
+        clientRef.current?.send({ type: "compose", clientMsgId: crypto.randomUUID(), ...input }),
+      // Tap a card button (e.g. accept an appointment) → server emits a system message.
+      tapAction: (messageId: string, actionId: string) =>
+        clientRef.current?.send({ type: "action", messageId, actionId }),
       setTyping: (isTyping: boolean) =>
         clientRef.current?.send({ type: "typing", isTyping }),
       markRead: (messageId: string) =>

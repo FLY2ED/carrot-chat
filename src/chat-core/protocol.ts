@@ -21,6 +21,31 @@ export function maskContact(
 // Runtime schema for events the client sends to the server. The worker calls
 // `ClientEventSchema.safeParse(json)` so a malformed (or tampered) payload
 // never reaches business logic — the TypeScript types alone are not a defence.
+// ── Rich message payloads: media attachments + interactive cards ──
+// These are the extension point that lets any service (appointments, trade
+// status, safe-pay, AI bots…) ride on top of the chat without touching the core.
+export const MediaSchema = z.object({
+  url: z.url(),
+  mime: z.string().max(100),
+  name: z.string().max(200).optional(),
+  size: z.number().int().nonnegative().optional(),
+});
+export type Media = z.infer<typeof MediaSchema>;
+
+export const CardActionSchema = z.object({
+  id: z.string().min(1).max(64),
+  label: z.string().min(1).max(40),
+  style: z.enum(["primary", "default"]).optional(),
+});
+export const CardSchema = z.object({
+  title: z.string().min(1).max(120),
+  body: z.string().max(500).optional(),
+  actions: z.array(CardActionSchema).max(4).optional(),
+  /** Arbitrary string metadata a service attaches (e.g. appointment time). */
+  meta: z.record(z.string(), z.string()).optional(),
+});
+export type Card = z.infer<typeof CardSchema>;
+
 export const ClientEventSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("send"),
@@ -34,6 +59,21 @@ export const ClientEventSchema = z.discriminatedUnion("type", [
     type: z.literal("history_request"),
     beforeSeq: z.number().int().positive().optional(),
     limit: z.number().int().min(1).max(100).optional(),
+  }),
+  // Rich message: image/file/system/card (plain text stays on `send`).
+  z.object({
+    type: z.literal("compose"),
+    kind: z.enum(["image", "file", "system", "card"]),
+    text: z.string().max(2000).optional(),
+    media: MediaSchema.optional(),
+    card: CardSchema.optional(),
+    clientMsgId: z.string().min(1).max(64).optional(),
+  }),
+  // Inline action: tapping a card button (e.g. accept an appointment).
+  z.object({
+    type: z.literal("action"),
+    messageId: z.string().min(1).max(128),
+    actionId: z.string().min(1).max(64),
   }),
 ]);
 
@@ -54,6 +94,10 @@ export const MessageSchema = z.object({
   clientMsgId: z.string().optional(),
   /** Client-local delivery state. Never set by the server. */
   status: z.enum(["sending", "sent", "failed"]).optional(),
+  // Rich content — absent or "text" renders as a plain bubble.
+  kind: z.enum(["text", "image", "file", "system", "card"]).optional(),
+  media: MediaSchema.optional(),
+  card: CardSchema.optional(),
 });
 export type Message = z.infer<typeof MessageSchema>;
 

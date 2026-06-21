@@ -6,14 +6,81 @@ function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 }
 
+function formatSize(bytes?: number): string {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 interface Props {
   messages: Message[];
   selfId: string | null;
   reads: Record<string, string>;
   onRetry?: (clientMsgId: string) => void;
+  onAction?: (messageId: string, actionId: string) => void;
   onLoadOlder?: () => void;
   hasMoreHistory?: boolean;
   loadingOlder?: boolean;
+}
+
+/** Renders the inner content of one message bubble by `kind`. */
+function BubbleBody({
+  m,
+  onAction,
+}: {
+  m: Message;
+  onAction?: (messageId: string, actionId: string) => void;
+}) {
+  switch (m.kind) {
+    case "image":
+      return m.media ? (
+        <a className="msg__media" href={m.media.url} target="_blank" rel="noreferrer">
+          <img src={m.media.url} alt={m.media.name ?? "이미지"} loading="lazy" />
+        </a>
+      ) : (
+        <div className="msg__bubble">{m.text}</div>
+      );
+    case "file":
+      return m.media ? (
+        <a className="msg__file" href={m.media.url} target="_blank" rel="noreferrer" download>
+          <span className="msg__file-icon" aria-hidden>
+            📎
+          </span>
+          <span className="msg__file-meta">
+            <span className="msg__file-name">{m.media.name ?? "첨부파일"}</span>
+            <span className="msg__file-size">{formatSize(m.media.size)}</span>
+          </span>
+        </a>
+      ) : (
+        <div className="msg__bubble">{m.text}</div>
+      );
+    case "card":
+      return m.card ? (
+        <div className="msg-card">
+          <div className="msg-card__title">{m.card.title}</div>
+          {m.card.body && <div className="msg-card__body">{m.card.body}</div>}
+          {m.card.actions && m.card.actions.length > 0 && (
+            <div className="msg-card__actions">
+              {m.card.actions.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`msg-card__btn${a.style === "primary" ? " msg-card__btn--primary" : ""}`}
+                  onClick={() => onAction?.(m.id, a.id)}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="msg__bubble">{m.text}</div>
+      );
+    default:
+      return <div className="msg__bubble">{m.text}</div>;
+  }
 }
 
 export function MessageList({
@@ -21,6 +88,7 @@ export function MessageList({
   selfId,
   reads,
   onRetry,
+  onAction,
   onLoadOlder,
   hasMoreHistory,
   loadingOlder,
@@ -75,6 +143,22 @@ export function MessageList({
         {virtualizer.getVirtualItems().map((vi) => {
           const m = messages[vi.index];
           if (!m) return null;
+
+          // System messages render centered, full-width — not as a sender bubble.
+          if (m.kind === "system") {
+            return (
+              <div
+                key={vi.key}
+                data-index={vi.index}
+                ref={virtualizer.measureElement}
+                className="msg-row msg-row--system"
+                style={{ transform: `translateY(${vi.start}px)` }}
+              >
+                <div className="msg-system">{m.text}</div>
+              </div>
+            );
+          }
+
           const mine = m.senderId === selfId;
           const read = mine && !m.status && m.ts <= readWatermark;
           const stateClass =
@@ -89,7 +173,7 @@ export function MessageList({
             >
               <div className={`msg ${mine ? "msg--mine" : "msg--theirs"}${stateClass}`}>
                 {!mine && <span className="msg__name">{m.senderName}</span>}
-                <div className="msg__bubble">{m.text}</div>
+                <BubbleBody m={m} onAction={onAction} />
                 <span className="msg__meta">
                   {m.maskApplied && (
                     <span

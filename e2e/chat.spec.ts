@@ -84,6 +84,31 @@ test("optimistic send shows immediately and reconciles without a duplicate", asy
   await expect(alice.getByText(text)).toHaveCount(1);
 });
 
+test("rich card message: appointment card broadcasts, tapping an action emits a system message", async ({
+  page,
+}) => {
+  const room = `e2e-card-${Date.now()}`;
+  await page.goto(`/?room=${room}`);
+
+  const alice = page.locator('section[aria-label="앨리스 채팅 패널"]');
+  const bada = page.locator('section[aria-label="바다 채팅 패널"]');
+  await expect(alice.getByText("실시간 연결됨")).toBeVisible();
+  await expect(bada.getByText("실시간 연결됨")).toBeVisible();
+
+  // Alice sends a 당근-style appointment card (rides the extensible message structure).
+  await page.getByRole("button", { name: "📅 약속 잡기" }).click();
+
+  // Both clients render the card with its title + action buttons.
+  await expect(bada.getByText("📅 약속 잡기")).toBeVisible();
+  const acceptBtn = bada.getByRole("button", { name: "수락" });
+  await expect(acceptBtn).toBeVisible();
+
+  // Bada taps "수락" → server resolves the label and broadcasts a system message.
+  await acceptBtn.click();
+  await expect(alice.getByText('바다님이 "수락"을(를) 선택했어요')).toBeVisible();
+  await expect(bada.getByText('바다님이 "수락"을(를) 선택했어요')).toBeVisible();
+});
+
 test("admin console reflects room activity + mask rate, and rejects bad tokens", async ({
   page,
   request,

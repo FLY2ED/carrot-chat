@@ -1,14 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import { ClientEventSchema, maskContact } from "../src/chat-core";
-import type { Member, Message, ServerEvent } from "../src/chat-core";
+import type { Card, Media, Member, Message, ServerEvent } from "../src/chat-core";
 
 /** Per-connection data that must survive WebSocket hibernation. */
 interface Attachment {
   userId: string;
   name: string;
-  /** Browser-install id (shared across tabs) — keys the persistent rate-limit window. */
   clientId: string;
-  /** Timestamps of recent `send` events — sliding-window rate limit. */
   sends?: number[];
 }
 
@@ -20,6 +18,9 @@ interface Row {
   text: string;
   ts: number;
   maskApplied: number;
+  kind: string | null;
+  payload: string | null;
+  clientMsgId: string | null;
 }
 
 interface Stats {
@@ -36,24 +37,40 @@ const INITIAL_HISTORY_LIMIT = 50;
 const MAX_PAGE_LIMIT = 100;
 const STAT_COLUMNS = ["messageCount", "maskedCount", "rateLimitedCount", "reconnectCount"] as const;
 type StatColumn = (typeof STAT_COLUMNS)[number];
+const HISTORY_COLS =
+  "rowid AS seq, id, senderId, senderName, text, ts, maskApplied, kind, payload, clientMsgId";
 
-const rowToMessage = (r: Row): Message => ({
-  id: r.id,
-  senderId: r.senderId,
-  senderName: r.senderName,
-  text: r.text,
-  ts: r.ts,
-  maskApplied: r.maskApplied === 1,
-  seq: Number(r.seq),
-});
+const rowToMessage = (r: Row): Message => {
+  let media: Media | undefined;
+  let card: Card | undefined;
+  if (r.payload) {
+    try {
+      const p = JSON.parse(r.payload) as { media?: Media; card?: Card };
+      media = p.media;
+      card = p.card;
+    } catch {
+      /* corrupt payload — render as plain */
+    }
+  }
+  return {
+    id: r.id,
+    senderId: r.senderId,
+    senderName: r.senderName,
+    text: r.text,
+    ts: r.ts,
+    maskApplied: r.maskApplied === 1,
+    seq: Number(r.seq),
+    kind: (r.kind ?? "text") as Message["kind"],
+    media,
+    card,
+    clientMsgId: r.clientMsgId ?? undefined,
+  };
+};
 
 /**
  * One ChatRoom Durable Object per room id. Holds the WebSocket connections and
- * the message history (in the DO's embedded SQLite). Uses the WebSocket
- * Hibernation API so idle rooms cost nothing while staying connected.
- *
- * Operational counters are reported to the AdminHub DO fire-and-forget so the
- * admin console never sits on the chat send path.
+ * message history (DO embedded SQLite). Hibernation API keeps idle rooms free.
+ * Rich messages (image/file/system/card) ride the same store via kind+payload.
  */
 export class ChatRoom extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -67,14 +84,25 @@ export class ChatRoom extends DurableObject<Env> {
         ts         INTEGER NOT NULL
       )`,
     );
-    try {
-      ctx.storage.sql.exec(
-        "ALTER TABLE messages ADD COLUMN maskApplied INTEGER NOT NULL DEFAULT 0",
-      );
-    } catch {
-      /* column already exists from a previous migration */
+    // Idempotent migrations — add columns on existing rooms once each.
+    for (const ddl of [
+      "ALTER TABLE messages ADD COLUMN maskApplied INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE messages ADD COLUMN kind TEXT",
+      "ALTER TABLE messages ADD COLUMN payload TEXT",
+      "ALTER TABLE messages ADD COLUMN clientMsgId TEXT",
+    ]) {
+      try {
+        ctx.storage.sql.exec(ddl);
+      } catch {
+        /* column already exists */
+      }
     }
-    // Operational counters (survive hibernation; read by the admin console).
+    // Idempotency key: a (sender, clientMsgId) pair maps to at most one stored
+    // message, so a retried send can never create a duplicate row. Partial index
+    // skips legacy/serverside messages that carry no clientMsgId.
+    ctx.storage.sql.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_msg_idem ON messages (senderId, clientMsgId) WHERE clientMsgId IS NOT NULL",
+    );
     ctx.storage.sql.exec(
       `CREATE TABLE IF NOT EXISTS room_stats (
         id               INTEGER PRIMARY KEY,
@@ -85,10 +113,7 @@ export class ChatRoom extends DurableObject<Env> {
       )`,
     );
     ctx.storage.sql.exec("INSERT OR IGNORE INTO room_stats (id) VALUES (1)");
-    // Runtime answers "ping" with "pong" without waking the object.
-    ctx.setWebSocketAutoResponse(
-      new WebSocketRequestResponsePair("ping", "pong"),
-    );
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -97,12 +122,9 @@ export class ChatRoom extends DurableObject<Env> {
     const name = (url.searchParams.get("name") ?? "익명").slice(0, 32);
     const clientId = (url.searchParams.get("clientId") ?? crypto.randomUUID()).slice(0, 128);
 
-    // Remember our room id (ChatRoom can't see the name it was addressed by).
     const roomId = url.pathname.match(/\/api\/room\/([^/]+)\/ws/)?.[1] ?? "unknown";
     await this.ctx.storage.put("roomId", roomId);
 
-    // Restore this client's rate-limit window (persisted on the previous close)
-    // so dropping and reopening the socket can't reset the quota.
     const restored = (await this.ctx.storage.get<number[]>(`rl:${clientId}`)) ?? [];
     const sends = restored.filter((t) => t > Date.now() - RATE_LIMIT_WINDOW_MS);
 
@@ -131,7 +153,7 @@ export class ChatRoom extends DurableObject<Env> {
     try {
       payload = JSON.parse(raw);
     } catch {
-      return; // ignore non-JSON frames (e.g. a stray "pong")
+      return;
     }
 
     const parsed = ClientEventSchema.safeParse(payload);
@@ -151,54 +173,60 @@ export class ChatRoom extends DurableObject<Env> {
 
     switch (event.type) {
       case "send": {
-        const now = Date.now();
-        const recent = (att.sends ?? []).filter((t) => t > now - RATE_LIMIT_WINDOW_MS);
-        if (recent.length >= RATE_LIMIT_MAX) {
-          this.bump("rateLimitedCount");
-          this.sendTo(ws, { type: "system", severity: "warn", reason: "rate_limited" });
-          void this.reportToHub(true);
-          return;
-        }
-        recent.push(now);
-        ws.serializeAttachment({ ...att, sends: recent } satisfies Attachment);
-
+        if (!this.allowSend(ws, att)) return;
         const original = event.text.trim().slice(0, 2000);
         if (!original) return;
         const masked = maskContact(original);
-        const maskApplied = original !== masked;
-        const id = crypto.randomUUID();
-        this.ctx.storage.sql.exec(
-          "INSERT INTO messages (id, senderId, senderName, text, ts, maskApplied) VALUES (?, ?, ?, ?, ?, ?)",
-          id,
-          att.userId,
-          att.name,
-          masked,
-          now,
-          maskApplied ? 1 : 0,
-        );
-        const seq = Number(
-          (this.ctx.storage.sql.exec("SELECT last_insert_rowid() AS s").one() as { s: number }).s,
-        );
-        this.ctx.storage.sql.exec(
-          "DELETE FROM messages WHERE ts < ?",
-          now - HISTORY_TTL_MS,
-        );
-        this.bump("messageCount");
-        if (maskApplied) this.bump("maskedCount");
-        // Structured log — counts/flags only, never message text (no PII).
-        console.log(JSON.stringify({ evt: "send", masked: maskApplied, seq }));
-        const message: Message = {
-          id,
-          senderId: att.userId,
-          senderName: att.name,
+        const { message, deduped } = this.persist(att, {
           text: masked,
-          ts: now,
-          maskApplied,
-          seq,
+          kind: "text",
+          maskApplied: original !== masked,
           clientMsgId: event.clientMsgId,
-        };
+        });
+        this.deliver(ws, message, deduped);
+        break;
+      }
+      case "compose": {
+        if (!this.allowSend(ws, att)) return;
+        // Mask any text content (body of a card too) before it is stored/sent.
+        const rawText = (event.text ?? "").slice(0, 2000);
+        const maskedText = maskContact(rawText);
+        const cardBody = event.card?.body ? maskContact(event.card.body) : event.card?.body;
+        const card = event.card ? { ...event.card, body: cardBody } : undefined;
+        const maskApplied =
+          maskedText !== rawText || (!!event.card?.body && cardBody !== event.card.body);
+        const { message, deduped } = this.persist(att, {
+          text: maskedText,
+          kind: event.kind,
+          media: event.media,
+          card,
+          maskApplied,
+          clientMsgId: event.clientMsgId,
+        });
+        this.deliver(ws, message, deduped);
+        break;
+      }
+      case "action": {
+        if (!this.allowSend(ws, att)) return;
+        // Resolve the tapped card button's label, then emit a system message.
+        const row = this.ctx.storage.sql
+          .exec("SELECT payload FROM messages WHERE id = ?", event.messageId)
+          .toArray()[0] as { payload?: string } | undefined;
+        let label = event.actionId;
+        if (row?.payload) {
+          try {
+            const p = JSON.parse(row.payload) as { card?: Card };
+            label = p.card?.actions?.find((a) => a.id === event.actionId)?.label ?? label;
+          } catch {
+            /* ignore */
+          }
+        }
+        const { message } = this.persist(att, {
+          text: `${att.name}님이 "${label}"을(를) 선택했어요`,
+          kind: "system",
+          maskApplied: false,
+        });
         this.broadcast({ type: "message", message });
-        void this.reportToHub(true);
         break;
       }
       case "typing": {
@@ -237,7 +265,6 @@ export class ChatRoom extends DurableObject<Env> {
       });
     }
     this.broadcastPresence();
-    // A room with no live sockets left is no longer "active".
     void this.reportToHub(this.members().length > 0);
   }
 
@@ -250,8 +277,106 @@ export class ChatRoom extends DurableObject<Env> {
     return this.recentMessages();
   }
 
+  /** Sliding-window rate limit per connection. Returns false (and notifies) if over. */
+  private allowSend(ws: WebSocket, att: Attachment): boolean {
+    const now = Date.now();
+    const recent = (att.sends ?? []).filter((t) => t > now - RATE_LIMIT_WINDOW_MS);
+    if (recent.length >= RATE_LIMIT_MAX) {
+      this.bump("rateLimitedCount");
+      this.sendTo(ws, { type: "system", severity: "warn", reason: "rate_limited" });
+      void this.reportToHub(true);
+      return false;
+    }
+    recent.push(now);
+    ws.serializeAttachment({ ...att, sends: recent } satisfies Attachment);
+    return true;
+  }
+
+  /**
+   * Insert a message (any kind), assign seq (rowid), trim TTL, bump counters.
+   * Idempotent on (senderId, clientMsgId): because delivery is at-least-once, a
+   * client may resend after a missed ack. If this clientMsgId is already stored
+   * for this sender we echo the stored message (same id+seq) and report
+   * `deduped: true`, so a retry is effectively-once — no duplicate row.
+   */
+  private persist(
+    att: Attachment,
+    parts: {
+      text: string;
+      kind: Message["kind"];
+      media?: Media;
+      card?: Card;
+      maskApplied: boolean;
+      clientMsgId?: string;
+    },
+  ): { message: Message; deduped: boolean } {
+    if (parts.clientMsgId) {
+      const existing = this.ctx.storage.sql
+        .exec(
+          `SELECT ${HISTORY_COLS} FROM messages WHERE senderId = ? AND clientMsgId = ? LIMIT 1`,
+          att.userId,
+          parts.clientMsgId,
+        )
+        .toArray()[0] as unknown as Row | undefined;
+      if (existing) {
+        console.log(JSON.stringify({ evt: "dedup", seq: Number(existing.seq) }));
+        return { message: rowToMessage(existing), deduped: true };
+      }
+    }
+
+    const now = Date.now();
+    const id = crypto.randomUUID();
+    const payload =
+      parts.media || parts.card ? JSON.stringify({ media: parts.media, card: parts.card }) : null;
+    this.ctx.storage.sql.exec(
+      "INSERT INTO messages (id, senderId, senderName, text, ts, maskApplied, kind, payload, clientMsgId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      id,
+      att.userId,
+      att.name,
+      parts.text,
+      now,
+      parts.maskApplied ? 1 : 0,
+      parts.kind ?? "text",
+      payload,
+      parts.clientMsgId ?? null,
+    );
+    const seq = Number(
+      (this.ctx.storage.sql.exec("SELECT last_insert_rowid() AS s").one() as { s: number }).s,
+    );
+    this.ctx.storage.sql.exec("DELETE FROM messages WHERE ts < ?", now - HISTORY_TTL_MS);
+    this.bump("messageCount");
+    if (parts.maskApplied) this.bump("maskedCount");
+    console.log(JSON.stringify({ evt: "msg", kind: parts.kind, masked: parts.maskApplied, seq }));
+    return {
+      message: {
+        id,
+        senderId: att.userId,
+        senderName: att.name,
+        text: parts.text,
+        ts: now,
+        maskApplied: parts.maskApplied,
+        seq,
+        kind: parts.kind ?? "text",
+        media: parts.media,
+        card: parts.card,
+        clientMsgId: parts.clientMsgId,
+      },
+      deduped: false,
+    };
+  }
+
+  /**
+   * Fan a stored message out to the room. A deduped retry is echoed only to the
+   * sender — everyone else already received the original — so it reconciles the
+   * sender's optimistic bubble without re-notifying the whole room.
+   */
+  private deliver(ws: WebSocket, message: Message, deduped: boolean): void {
+    if (deduped) this.sendTo(ws, { type: "message", message });
+    else this.broadcast({ type: "message", message });
+    void this.reportToHub(true);
+  }
+
   private bump(col: StatColumn): void {
-    // `col` is constrained to a known column union — safe to interpolate.
     this.ctx.storage.sql.exec(`UPDATE room_stats SET ${col} = ${col} + 1 WHERE id = 1`);
   }
 
@@ -263,7 +388,6 @@ export class ChatRoom extends DurableObject<Env> {
       .one() as unknown as Stats;
   }
 
-  /** Fire-and-forget report to the global admin aggregator. Never throws upward. */
   private async reportToHub(active: boolean): Promise<void> {
     try {
       const roomId = (await this.ctx.storage.get<string>("roomId")) ?? "unknown";
@@ -272,7 +396,7 @@ export class ChatRoom extends DurableObject<Env> {
         ...this.readStats(),
       });
     } catch {
-      /* admin visibility is best-effort — chat must not depend on it */
+      /* admin visibility is best-effort */
     }
   }
 
@@ -280,7 +404,7 @@ export class ChatRoom extends DurableObject<Env> {
     const cutoff = Date.now() - HISTORY_TTL_MS;
     const rows = this.ctx.storage.sql
       .exec(
-        "SELECT rowid AS seq, id, senderId, senderName, text, ts, maskApplied FROM messages WHERE ts >= ? ORDER BY rowid DESC LIMIT ?",
+        `SELECT ${HISTORY_COLS} FROM messages WHERE ts >= ? ORDER BY rowid DESC LIMIT ?`,
         cutoff,
         INITIAL_HISTORY_LIMIT,
       )
@@ -296,7 +420,7 @@ export class ChatRoom extends DurableObject<Env> {
     const before = beforeSeq ?? Number.MAX_SAFE_INTEGER;
     const rows = this.ctx.storage.sql
       .exec(
-        "SELECT rowid AS seq, id, senderId, senderName, text, ts, maskApplied FROM messages WHERE ts >= ? AND rowid < ? ORDER BY rowid DESC LIMIT ?",
+        `SELECT ${HISTORY_COLS} FROM messages WHERE ts >= ? AND rowid < ? ORDER BY rowid DESC LIMIT ?`,
         cutoff,
         before,
         limit + 1,

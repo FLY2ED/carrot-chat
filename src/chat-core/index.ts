@@ -22,6 +22,9 @@ export {
   ServerEventSchema,
   MessageSchema,
   MemberSchema,
+  MediaSchema,
+  CardSchema,
+  CardActionSchema,
   maskContact,
 } from "./protocol";
 
@@ -31,6 +34,8 @@ export type {
   Message,
   Member,
   ConnectionStatus,
+  Media,
+  Card,
 } from "./types";
 
 // `nextDelay` / `withJitter` (reconnect policy) are intentionally NOT exported —
