@@ -71,7 +71,7 @@ export function DocsApp() {
           <div className="docs__badges">
             <span className="badge">React 19 · TypeScript</span>
             <span className="badge">Cloudflare Durable Objects · R2</span>
-            <span className="badge">Vitest 33 · Playwright 9</span>
+            <span className="badge">Vitest 35 · Playwright 11</span>
           </div>
         </header>
 
@@ -394,6 +394,9 @@ if (prompt !== null) {
           <ul className="docs__links">
             <li>
               <a href="/">라이브 데모 — carrot.naldadev.com</a>
+            </li>
+            <li>
+              <a href="/inbox.html">받은함 (멀티룸 인박스 — UserInbox DO)</a>
             </li>
             <li>
               <a href="/admin">운영 콘솔 (어드민)</a>

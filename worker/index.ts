@@ -1,10 +1,11 @@
 import { ChatRoom } from "./chat-room";
 import { AdminHub } from "./admin-hub";
+import { UserInbox } from "./user-inbox";
 import { handleServe, handleUpload } from "./media";
 import { authorizeHandshake, signToken } from "./auth";
 
 // Re-export the Durable Object classes so the runtime can instantiate them.
-export { ChatRoom, AdminHub };
+export { ChatRoom, AdminHub, UserInbox };
 
 // Matches /api/room/:roomId/ws  (roomId limited to a safe charset)
 const WS_ROUTE = /^\/api\/room\/([A-Za-z0-9_-]{1,64})\/ws$/;
@@ -28,6 +29,20 @@ export default {
       // One Durable Object instance per room id → the room's single source of truth.
       const stub = env.CHAT_ROOM.getByName(wsMatch[1]);
       return stub.fetch(gate.request ?? request);
+    }
+
+    // Multi-room inbox WebSocket — one UserInbox DO per user id. Same handshake
+    // gate (token → verified identity, else anonymous when ALLOW_ANON).
+    if (url.pathname === "/api/inbox/ws") {
+      if (request.headers.get("Upgrade") !== "websocket") {
+        return new Response("Expected WebSocket Upgrade", { status: 426 });
+      }
+      const gate = await authorizeHandshake(request, url, env);
+      if (!gate.ok) return new Response(gate.reason ?? "Unauthorized", { status: 401 });
+      const effective = new URL((gate.request ?? request).url);
+      const userId = (effective.searchParams.get("user") ?? "").slice(0, 64);
+      if (!userId) return new Response("missing user", { status: 400 });
+      return env.USER_INBOX.getByName(userId).fetch(request);
     }
 
     // Demo token issuer. A real app mints tokens from its own login backend after

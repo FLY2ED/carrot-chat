@@ -217,8 +217,12 @@ chat.send({ type: "send", text: "안녕하세요" });`}</code>
           <span>카드·시스템·이미지/파일 확장 구조 · @ai tool-use 어시스턴트(키 없이 동작)</span>
         </div>
         <div className="arch">
+          <b>멀티룸 인박스 · 알림</b>
+          <span>UserInbox DO 집계 · 안 읽음/미리보기/즐겨찾기 · 실시간 도착 토스트</span>
+        </div>
+        <div className="arch">
           <b>Tested</b>
-          <span>Vitest 33 · Playwright E2E 9 · typecheck/build 통과</span>
+          <span>Vitest 35 · Playwright E2E 11 · typecheck/build 통과</span>
         </div>
       </div>
 
@@ -315,6 +319,8 @@ chat.send({ type: "send", text: "안녕하세요" });`}</code>
         </a>
         <span> · </span>
         <a href="/docs.html">SDK 문서</a>
+        <span> · </span>
+        <a href="/inbox.html">받은함</a>
         <span> · </span>
         <a href="/admin.html">운영 콘솔</a>
         <span> · 박성재 · NALDA</span>
