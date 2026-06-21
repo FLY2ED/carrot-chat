@@ -209,12 +209,16 @@ chat.send({ type: "send", text: "안녕하세요" });`}</code>
           <span>낙관적 전송 · 가상 스크롤 · 접근성 <code>role=log</code>/<code>aria-live</code></span>
         </div>
         <div className="arch">
-          <b>Durable Object</b>
-          <span>Hibernation · SQLite seq 순서 · 서버 정책 + rate limit · 어드민 계측</span>
+          <b>Durable Object · R2</b>
+          <span>Hibernation · SQLite seq 순서 · 서버 정책 + rate limit · 파일 첨부 · 어드민 계측</span>
+        </div>
+        <div className="arch">
+          <b>리치 메시지 · AI</b>
+          <span>카드·시스템·이미지/파일 확장 구조 · @ai tool-use 어시스턴트(키 없이 동작)</span>
         </div>
         <div className="arch">
           <b>Tested</b>
-          <span>Vitest 22 · Playwright E2E 5 · typecheck/build 통과</span>
+          <span>Vitest 28 · Playwright E2E 8 · typecheck/build 통과</span>
         </div>
       </div>
 

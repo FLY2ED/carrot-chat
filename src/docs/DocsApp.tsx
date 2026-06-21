@@ -6,6 +6,8 @@ const SECTIONS = [
   { id: "install", title: "설치" },
   { id: "quickstart", title: "Quickstart" },
   { id: "react", title: "React" },
+  { id: "messages", title: "리치 메시지" },
+  { id: "media", title: "파일 · 이미지" },
   { id: "api", title: "Public API" },
   { id: "transport", title: "Custom Transport" },
   { id: "policy", title: "정책 · 검증" },
@@ -68,8 +70,8 @@ export function DocsApp() {
           </p>
           <div className="docs__badges">
             <span className="badge">React 19 · TypeScript</span>
-            <span className="badge">Cloudflare Durable Objects</span>
-            <span className="badge">Vitest 22 · Playwright 5</span>
+            <span className="badge">Cloudflare Durable Objects · R2</span>
+            <span className="badge">Vitest 28 · Playwright 8</span>
           </div>
         </header>
 
@@ -167,6 +169,61 @@ client.close();`}
           />
         </section>
 
+        <section id="messages">
+          <h2>리치 메시지 (확장형 구조)</h2>
+          <p>
+            모든 메시지는 <code>kind</code>로 구분됩니다 — <code>text</code>(기본)·<code>image</code>·
+            <code>file</code>·<code>system</code>·<code>card</code>. 카드는 제목·본문·인라인 액션
+            버튼을 담고, 버튼을 누르면 <code>action</code> 이벤트가 서버로 가 시스템 메시지로
+            broadcast됩니다. 이 구조 하나로 약속 잡기·거래 상태·안전결제·안심번호 같은 도메인 기능을
+            코어 수정 없이 얹습니다.
+          </p>
+          <CodeBlock
+            code={`// 카드 메시지 — 예: 약속 제안
+room.compose({
+  kind: "card",
+  card: {
+    title: "📅 약속 잡기",
+    body: "내일 오후 3시, 강남역 11번 출구 어떠세요?",
+    actions: [
+      { id: "accept", label: "수락", style: "primary" },
+      { id: "suggest", label: "다른 시간 제안" },
+    ],
+  },
+});
+
+// 카드 버튼 탭 → 서버가 시스템 메시지로 broadcast
+//   "OO님이 \\"수락\\"을(를) 선택했어요"
+room.tapAction(messageId, "accept");`}
+          />
+          <p className="docs__note">
+            카드 본문도 서버측 마스킹을 거칩니다. 전화·안전거래·약속 같은 <b>당근 도메인 기능은
+            코어가 아니라 이 구조 위의 데모/플러그인</b>으로 구현돼, SDK 자체는 당근 종속성을 갖지
+            않습니다.
+          </p>
+        </section>
+
+        <section id="media">
+          <h2>파일 · 이미지 (Cloudflare R2)</h2>
+          <p>
+            첨부는 raw-body로 업로드 엔드포인트에 보내고(<code>content-type</code>=파일 mime), 서버가
+            R2에 저장한 뒤 절대 URL이 담긴 <code>media</code> 디스크립터를 돌려줍니다. 그걸로{" "}
+            <code>image</code>/<code>file</code> 메시지를 compose합니다.
+          </p>
+          <CodeBlock
+            code={`// useChatRoom이 업로드 + compose를 한 번에
+await room.attach(file); // 5MB 상한 · mime 화이트리스트 · R2 저장
+
+// 내부 동작:
+//   POST /api/room/:id/upload   (body = file, x-filename 헤더)
+//     → { url, mime, name, size }   // url은 /api/media/<key> 절대경로
+//   room.compose({ kind: "image", media })`}
+          />
+          <p className="docs__note">
+            저장 객체 키는 UUID 경로라 불변 — <code>cache-control: immutable</code>로 서빙합니다.
+          </p>
+        </section>
+
         <section id="api">
           <h2>Public API</h2>
           <p>
@@ -202,14 +259,22 @@ client.close();`}
               </tr>
               <tr>
                 <td>
+                  <code>MessageSchema</code>, <code>MemberSchema</code>,{" "}
+                  <code>MediaSchema</code>, <code>CardSchema</code>, <code>CardActionSchema</code>
+                </td>
+                <td>메시지·리치 콘텐츠(이미지·파일·카드) 검증 스키마</td>
+              </tr>
+              <tr>
+                <td>
                   <code>maskContact</code>
                 </td>
-                <td>연락처/이메일 마스킹 정책 (순수 함수)</td>
+                <td>연락처/이메일 마스킹 정책 (순수 함수, 도메인 패턴 확장 가능)</td>
               </tr>
               <tr>
                 <td>
                   <code>Message</code>, <code>ServerEvent</code>, <code>ClientEvent</code>,{" "}
-                  <code>Member</code>, <code>ConnectionStatus</code>
+                  <code>Member</code>, <code>ConnectionStatus</code>, <code>Media</code>,{" "}
+                  <code>Card</code>
                 </td>
                 <td>이벤트 모델 타입</td>
               </tr>
@@ -295,28 +360,29 @@ window.addEventListener("auth-refreshed", (e) => {
         <section id="assistant">
           <h2>AI 어시스턴트 (tool-use)</h2>
           <p>
-            채팅에 LLM 어시스턴트를 붙이려면 채팅 코어는 그대로 두고, 서버가 특정 메시지
-            (<code>@assistant</code> 멘션 등)를 가로채 LLM을 <b>tool-use</b>로 호출한 뒤 그 답을 봇
-            메시지로 broadcast하면 됩니다.
+            채팅 코어는 그대로 두고, 서버가 <code>@ai</code>(또는 <code>@봇</code>·<code>/ai</code>)
+            멘션을 가로채 LLM을 <b>tool-use</b>로 호출한 뒤 그 답을 봇 메시지로 broadcast합니다. 봇
+            응답도 일반 메시지(<code>kind: text | card | system</code>)라 위의 리치 메시지 구조를 그대로
+            탑니다.
           </p>
           <CodeBlock
-            code={`// worker: @assistant 멘션을 LLM tool-use로 처리
-if (text.startsWith("@assistant")) {
-  let res = await gemini.generate({
-    contents: history,
-    tools: [{ functionDeclarations: TOOLS }], // 동적 도구 호출
-  });
-  // 도구 호출 루프: functionCalls() → 실행 → 결과 회신 → 최종 답
-  while (res.functionCalls()?.length) {
-    res = await runToolsAndContinue(res);
-  }
-  this.broadcast({ type: "message", message: botMessage(res.text()) });
+            code={`// worker: @ai 멘션을 tool-use로 처리
+const prompt = parseAssistantTrigger(text); // "@ai 약속 잡아줘" → "약속 잡아줘"
+if (prompt !== null) {
+  const reply = await runAssistant(env, history, prompt);
+  // GEMINI_API_KEY 있으면 → generateContent + functionDeclarations
+  //   (propose_appointment · recommend_safe_payment · summarize_conversation)
+  // 없으면 → 같은 도구 실행기를 구동하는 결정론적 키워드 스텁
+  //   (키 없이도 데모가 완전히 동작)
+  this.broadcast({ type: "message", message: botMessage(reply) });
 }`}
           />
           <p className="docs__note">
-            artdata의 미대 입시 챗봇이 이 구조예요 — Gemini가 14개 도구(점수 환산·합격 사례 조회 등)를
-            동적으로 호출하고 응답을 SSE로 스트리밍합니다. <code>GEMINI_API_KEY</code>를 Wrangler
-            secret으로 설정하면 같은 패턴을 이 SDK 위에 얹을 수 있습니다.
+            이 데모의 어시스턴트는 <b>키 없이도 도는 단일 라운드 tool-use</b>입니다 —{" "}
+            <code>GEMINI_API_KEY</code>를 Wrangler secret으로 넣으면 같은 코드가 실제 Gemini 경로로
+            전환되고, 네트워크/쿼터 실패는 텍스트 응답으로 degrade돼 채팅이 멈추지 않습니다. 실서비스
+            artdata의 미대 입시 챗봇은 Gemini가 14개 도구를 동적 호출하고 SSE로 스트리밍하는
+            확장판입니다.
           </p>
         </section>
 
