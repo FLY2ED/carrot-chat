@@ -89,6 +89,59 @@ export default function App() {
     showToast("앨리스 연결을 끊었어요 — 자동 재연결을 지켜보세요");
   };
 
+  // ── 당근식 도메인 메시지 데모 — 확장형 메시지 구조(card/system) 위에 얹은 플러그인 ──
+  const sendAppointmentCard = () => {
+    aliceApi.current?.compose({
+      kind: "card",
+      card: {
+        title: "📅 약속 잡기",
+        body: "내일 오후 3시, 강남역 11번 출구 어떠세요?",
+        actions: [
+          { id: "accept", label: "수락", style: "primary" },
+          { id: "suggest", label: "다른 시간 제안" },
+        ],
+        meta: { when: "내일 15:00", place: "강남역 11번 출구" },
+      },
+    });
+    showToast("앨리스가 약속 카드를 보냈어요 — 바다 탭에서 버튼을 눌러보세요");
+  };
+
+  const sendTradeStatus = () => {
+    bobApi.current?.compose({
+      kind: "system",
+      text: "바다님이 거래 상태를 '예약중'으로 변경했어요",
+    });
+  };
+
+  const sendSafePayCard = () => {
+    aliceApi.current?.compose({
+      kind: "card",
+      card: {
+        title: "🔒 당근페이 안전결제",
+        body: "결제하면 거래 완료 시까지 금액을 보관해요. 사기 걱정 없이 거래하세요.",
+        actions: [{ id: "pay", label: "32,000원 결제하기", style: "primary" }],
+        meta: { amount: "32000" },
+      },
+    });
+  };
+
+  const sendSafeNumberCard = () => {
+    bobApi.current?.compose({
+      kind: "card",
+      card: {
+        title: "📞 안심번호로 전화",
+        body: "실제 번호 대신 안심번호(0508-xxxx)로 연결돼요. 번호는 거래 후 자동 폐기됩니다.",
+        actions: [{ id: "call", label: "전화 걸기", style: "primary" }],
+      },
+    });
+  };
+
+  // @ai 멘션으로 in-room AI 어시스턴트 호출 — 키가 없으면 서버가 오프라인 스텁으로 답함.
+  const askAssistant = () => {
+    aliceApi.current?.sendMessage("@ai 약속 잡아줘");
+    showToast("당근 AI를 호출했어요 — 잠시 후 답장이 도착해요");
+  };
+
   const handleAliceApi = useCallback((api: ChatPanelApi | null) => {
     aliceApi.current = api;
   }, []);
@@ -156,12 +209,16 @@ chat.send({ type: "send", text: "안녕하세요" });`}</code>
           <span>낙관적 전송 · 가상 스크롤 · 접근성 <code>role=log</code>/<code>aria-live</code></span>
         </div>
         <div className="arch">
-          <b>Durable Object</b>
-          <span>Hibernation · SQLite seq 순서 · 서버 정책 + rate limit · 어드민 계측</span>
+          <b>Durable Object · R2</b>
+          <span>Hibernation · SQLite seq 순서 · 서버 정책 + rate limit · 파일 첨부 · 어드민 계측</span>
+        </div>
+        <div className="arch">
+          <b>리치 메시지 · AI</b>
+          <span>카드·시스템·이미지/파일 확장 구조 · @ai tool-use 어시스턴트(키 없이 동작)</span>
         </div>
         <div className="arch">
           <b>Tested</b>
-          <span>Vitest 22 · Playwright E2E 5 · typecheck/build 통과</span>
+          <span>Vitest 28 · Playwright E2E 8 · typecheck/build 통과</span>
         </div>
       </div>
 
@@ -185,6 +242,24 @@ chat.send({ type: "send", text: "안녕하세요" });`}</code>
           </button>
           <button type="button" className="btn" onClick={reconnectSim}>
             재연결 시뮬레이션 (앨리스)
+          </button>
+        </div>
+        <div className="controls__row controls__row--actions">
+          <span className="controls__label controls__label--sub">당근 기능 데모</span>
+          <button type="button" className="btn btn--soft" onClick={sendAppointmentCard}>
+            📅 약속 잡기
+          </button>
+          <button type="button" className="btn btn--soft" onClick={sendTradeStatus}>
+            🏷️ 거래 상태 변경
+          </button>
+          <button type="button" className="btn btn--soft" onClick={sendSafePayCard}>
+            🔒 안전결제
+          </button>
+          <button type="button" className="btn btn--soft" onClick={sendSafeNumberCard}>
+            📞 안심번호
+          </button>
+          <button type="button" className="btn btn--soft" onClick={askAssistant}>
+            🤖 AI 어시스턴트
           </button>
         </div>
         {toast && (

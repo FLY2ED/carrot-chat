@@ -1,11 +1,14 @@
 import { ChatRoom } from "./chat-room";
 import { AdminHub } from "./admin-hub";
+import { handleServe, handleUpload } from "./media";
 
 // Re-export the Durable Object classes so the runtime can instantiate them.
 export { ChatRoom, AdminHub };
 
 // Matches /api/room/:roomId/ws  (roomId limited to a safe charset)
 const WS_ROUTE = /^\/api\/room\/([A-Za-z0-9_-]{1,64})\/ws$/;
+const UPLOAD_ROUTE = /^\/api\/room\/([A-Za-z0-9_-]{1,64})\/upload$/;
+const MEDIA_ROUTE = /^\/api\/media\/(.+)$/;
 const ADMIN_ROOM_ROUTE = /^\/api\/admin\/room\/([A-Za-z0-9_-]{1,64})$/;
 
 export default {
@@ -20,6 +23,18 @@ export default {
       // One Durable Object instance per room id → the room's single source of truth.
       const stub = env.CHAT_ROOM.getByName(wsMatch[1]);
       return stub.fetch(request);
+    }
+
+    // Media: raw-body upload (POST) and object serving (GET) via R2.
+    const uploadMatch = url.pathname.match(UPLOAD_ROUTE);
+    if (uploadMatch) {
+      if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+      return handleUpload(request, env, uploadMatch[1]);
+    }
+    const mediaMatch = url.pathname.match(MEDIA_ROUTE);
+    if (mediaMatch) {
+      if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
+      return handleServe(env, mediaMatch[1]);
     }
 
     // Read-only, token-gated admin console API. Declared before the /api/ 404 and
