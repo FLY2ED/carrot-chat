@@ -71,7 +71,7 @@ export function DocsApp() {
           <div className="docs__badges">
             <span className="badge">React 19 · TypeScript</span>
             <span className="badge">Cloudflare Durable Objects · R2</span>
-            <span className="badge">Vitest 35 · Playwright 11</span>
+            <span className="badge">Vitest 35 · Playwright 13</span>
           </div>
         </header>
 
@@ -369,23 +369,29 @@ new ChatClient({ url: \`wss://host/api/room/\${roomId}/ws?token=\${token}\` });`
             탑니다.
           </p>
           <CodeBlock
-            code={`// worker: @ai 멘션을 tool-use로 처리
+            code={`// worker: @ai 멘션을 멀티턴 tool-use 루프로 처리
 const prompt = parseAssistantTrigger(text); // "@ai 약속 잡아줘" → "약속 잡아줘"
 if (prompt !== null) {
   const reply = await runAssistant(env, history, prompt);
-  // GEMINI_API_KEY 있으면 → generateContent + functionDeclarations
-  //   (propose_appointment · recommend_safe_payment · summarize_conversation)
-  // 없으면 → 같은 도구 실행기를 구동하는 결정론적 키워드 스텁
-  //   (키 없이도 데모가 완전히 동작)
   this.broadcast({ type: "message", message: botMessage(reply) });
+}
+
+// runAssistant 내부 (GEMINI_API_KEY 있을 때):
+for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+  const parts = await generate(contents);          // Gemini generateContent
+  const fc = parts.find(p => p.functionCall)?.functionCall;
+  if (!fc) return text(parts);                      // 텍스트 → 최종 답
+  const reply = execTool(fc.name, fc.args);
+  if (TERMINAL_TOOLS.has(fc.name)) return reply;    // 카드 도구 → 즉시 종료
+  contents.push(modelTurn(fc), functionResponse(fc, reply.text)); // 데이터 도구 → 회신 후 계속
 }`}
           />
           <p className="docs__note">
-            이 데모의 어시스턴트는 <b>키 없이도 도는 단일 라운드 tool-use</b>입니다 —{" "}
-            <code>GEMINI_API_KEY</code>를 Wrangler secret으로 넣으면 같은 코드가 실제 Gemini 경로로
-            전환되고, 네트워크/쿼터 실패는 텍스트 응답으로 degrade돼 채팅이 멈추지 않습니다. 실서비스
-            artdata의 미대 입시 챗봇은 Gemini가 14개 도구를 동적 호출하고 SSE로 스트리밍하는
-            확장판입니다.
+            <b>멀티턴 도구 루프</b> — 카드를 만드는 도구는 즉시 끝내고, 데이터를 돌려주는 도구
+            (요약 등)는 결과를 모델에 다시 넣어 답을 잇습니다(<code>MAX_TOOL_TURNS</code> 상한).{" "}
+            <code>GEMINI_API_KEY</code>가 없으면 같은 도구 실행기를 구동하는 결정론적 키워드 스텁으로
+            <b>키 없이도 데모가 완전히 동작</b>하고, 네트워크/쿼터 실패는 텍스트로 degrade돼 채팅이
+            멈추지 않습니다. 실서비스 artdata의 미대 입시 챗봇이 같은 구조(14개 도구·SSE 스트리밍)입니다.
           </p>
         </section>
 

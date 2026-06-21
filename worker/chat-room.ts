@@ -135,6 +135,15 @@ export class ChatRoom extends DurableObject<Env> {
       )`,
     );
     ctx.storage.sql.exec("INSERT OR IGNORE INTO room_stats (id) VALUES (1)");
+    // Durable membership: everyone who has ever joined, so the inbox fan-out can
+    // reach members who are currently OFFLINE (a connection list can't).
+    ctx.storage.sql.exec(
+      `CREATE TABLE IF NOT EXISTS room_members (
+        userId   TEXT PRIMARY KEY,
+        name     TEXT NOT NULL,
+        lastSeen INTEGER NOT NULL DEFAULT 0
+      )`,
+    );
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
@@ -146,6 +155,16 @@ export class ChatRoom extends DurableObject<Env> {
 
     const roomId = url.pathname.match(/\/api\/room\/([^/]+)\/ws/)?.[1] ?? "unknown";
     await this.ctx.storage.put("roomId", roomId);
+
+    // Record durable membership so offline members still get inbox fan-out.
+    // The assistant is a virtual sender and never connects, so it's never added.
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_members (userId, name, lastSeen) VALUES (?, ?, ?)
+       ON CONFLICT(userId) DO UPDATE SET name = excluded.name, lastSeen = excluded.lastSeen`,
+      userId,
+      name,
+      Date.now(),
+    );
 
     const restored = (await this.ctx.storage.get<number[]>(`rl:${clientId}`)) ?? [];
     const sends = restored.filter((t) => t > Date.now() - RATE_LIMIT_WINDOW_MS);
@@ -436,15 +455,15 @@ export class ChatRoom extends DurableObject<Env> {
   /**
    * Fan a fire-and-forget update out to each member's UserInbox DO. The sender's
    * inbox updates the preview without bumping unread; everyone else gets +1.
-   * Best-effort: the chat is authoritative, inbox visibility is secondary. Only
-   * currently-connected members are notified (no offline delivery in this demo).
+   * Fans out to DURABLE members (everyone who ever joined), so an offline member
+   * still accrues unread. Best-effort: the chat is authoritative, inbox secondary.
    */
   private async reportToInboxes(message: Message): Promise<void> {
     try {
       const roomId = (await this.ctx.storage.get<string>("roomId")) ?? "unknown";
       const preview = inboxPreview(message);
       await Promise.all(
-        this.members().map((m) =>
+        this.persistentMembers().map((m) =>
           this.env.USER_INBOX.getByName(m.id).recordMessage(
             roomId,
             preview,
@@ -520,6 +539,14 @@ export class ChatRoom extends DurableObject<Env> {
       if (att) byId.set(att.userId, { id: att.userId, name: att.name });
     }
     return [...byId.values()];
+  }
+
+  /** Everyone who has ever joined (connected or not) — used for inbox fan-out. */
+  private persistentMembers(): Member[] {
+    const rows = this.ctx.storage.sql
+      .exec("SELECT userId, name FROM room_members")
+      .toArray() as unknown as { userId: string; name: string }[];
+    return rows.map((r) => ({ id: r.userId, name: r.name }));
   }
 
   private sendTo(ws: WebSocket, event: ServerEvent): void {

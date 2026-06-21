@@ -218,11 +218,11 @@ chat.send({ type: "send", text: "안녕하세요" });`}</code>
         </div>
         <div className="arch">
           <b>멀티룸 인박스 · 알림</b>
-          <span>UserInbox DO 집계 · 안 읽음/미리보기/즐겨찾기 · 실시간 도착 토스트</span>
+          <span>UserInbox DO · 안 읽음/즐겨찾기 · 오프라인 전달 · 전역 알림 벨 · 도착 토스트</span>
         </div>
         <div className="arch">
           <b>Tested</b>
-          <span>Vitest 35 · Playwright E2E 11 · typecheck/build 통과</span>
+          <span>Vitest 35 · Playwright E2E 13 · typecheck/build 통과</span>
         </div>
       </div>
 

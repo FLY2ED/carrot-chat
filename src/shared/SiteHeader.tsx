@@ -1,5 +1,6 @@
-// Shared top nav across the three entries (demo / docs / admin) so visitors can
-// hop between them. Kept dependency-free so each entry can drop it in.
+// Shared top nav across the entries (demo / docs / inbox / admin) so visitors can
+// hop between them, plus a global notification bell.
+import { NotificationBell } from "./NotificationBell";
 
 const LINKS = [
   { href: "/", key: "demo", label: "데모" },
@@ -26,6 +27,7 @@ export function SiteHeader({ current }: { current: "demo" | "docs" | "inbox" | "
             {l.label}
           </a>
         ))}
+        <NotificationBell />
       </nav>
     </header>
   );

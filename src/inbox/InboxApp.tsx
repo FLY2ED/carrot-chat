@@ -26,8 +26,8 @@ export function InboxApp() {
   const initial = useMemo(() => {
     const q = new URLSearchParams(location.search);
     return {
-      user: (q.get("user") ?? sessionStorage.getItem(USER_KEY) ?? "").slice(0, 64),
-      name: (q.get("name") ?? sessionStorage.getItem(NAME_KEY) ?? "").slice(0, 32),
+      user: (q.get("user") ?? localStorage.getItem(USER_KEY) ?? "").slice(0, 64),
+      name: (q.get("name") ?? localStorage.getItem(NAME_KEY) ?? "").slice(0, 32),
     };
   }, []);
   const [identity, setIdentity] = useState(initial);
@@ -42,8 +42,10 @@ export function InboxApp() {
 
   useEffect(() => {
     if (!identity.user) return;
-    sessionStorage.setItem(USER_KEY, identity.user);
-    sessionStorage.setItem(NAME_KEY, identity.name || identity.user);
+    // localStorage (not session) so the global header bell on other tabs/pages
+    // can pick up the same inbox identity.
+    localStorage.setItem(USER_KEY, identity.user);
+    localStorage.setItem(NAME_KEY, identity.name || identity.user);
 
     // New connection → re-baseline so the first snapshot doesn't toast stale unread.
     baselineSet.current = false;
@@ -184,8 +186,8 @@ export function InboxApp() {
             type="button"
             className="btn btn--ghost"
             onClick={() => {
-              sessionStorage.removeItem(USER_KEY);
-              sessionStorage.removeItem(NAME_KEY);
+              localStorage.removeItem(USER_KEY);
+              localStorage.removeItem(NAME_KEY);
               setRooms([]);
               setIdentity({ user: "", name: "" });
             }}

@@ -144,9 +144,19 @@ interface GeminiPart {
   text?: string;
   functionCall?: { name: string; args?: Record<string, unknown> };
 }
+interface GeminiContent {
+  role: string;
+  parts: Record<string, unknown>[];
+}
 
-function toContents(history: Message[], userText: string) {
-  const turns = history
+// Tools that produce a final UI message (a card) end the turn immediately. Other
+// tools return DATA that is fed back so the model can reason/answer — that's what
+// makes the loop multi-turn (mirrors artdata's MAX_TOOL_TURNS chatbot).
+const TERMINAL_TOOLS = new Set(["propose_appointment", "recommend_safe_payment"]);
+const MAX_TOOL_TURNS = 4;
+
+function toContents(history: Message[], userText: string): GeminiContent[] {
+  const turns: GeminiContent[] = history
     .filter((m) => m.kind !== "system")
     .slice(-12)
     .map((m) => ({
@@ -157,30 +167,50 @@ function toContents(history: Message[], userText: string) {
   return turns;
 }
 
-async function callGemini(
-  key: string,
-  history: Message[],
-  userText: string,
-): Promise<AssistantReply> {
+async function generate(key: string, contents: GeminiContent[]): Promise<GeminiPart[]> {
   const res = await fetch(GEMINI_URL, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: toContents(history, userText),
+      contents,
       tools: TOOLS,
       toolConfig: { functionCallingConfig: { mode: "AUTO" } },
     }),
   });
   if (!res.ok) throw new Error(`gemini ${res.status}`);
-  const data = (await res.json()) as {
-    candidates?: { content?: { parts?: GeminiPart[] } }[];
-  };
-  const parts = data.candidates?.[0]?.content?.parts ?? [];
-  const fc = parts.find((p) => p.functionCall)?.functionCall;
-  if (fc) return execTool(fc.name, fc.args ?? {}, history);
-  const text = parts.map((p) => p.text).filter(Boolean).join(" ").trim();
-  return { kind: "text", text: text || "무엇을 도와드릴까요?" };
+  const data = (await res.json()) as { candidates?: { content?: { parts?: GeminiPart[] } }[] };
+  return data.candidates?.[0]?.content?.parts ?? [];
+}
+
+async function callGemini(
+  key: string,
+  history: Message[],
+  userText: string,
+): Promise<AssistantReply> {
+  const contents = toContents(history, userText);
+  let lastReply: AssistantReply | null = null;
+
+  for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+    const parts = await generate(key, contents);
+    const fc = parts.find((p) => p.functionCall)?.functionCall;
+    if (!fc) {
+      const text = parts.map((p) => p.text).filter(Boolean).join(" ").trim();
+      return { kind: "text", text: text || lastReply?.text || "무엇을 도와드릴까요?" };
+    }
+
+    const reply = execTool(fc.name, fc.args ?? {}, history);
+    lastReply = reply;
+    if (TERMINAL_TOOLS.has(fc.name)) return reply; // card tool → that's the answer
+
+    // Data tool (e.g. summarize): feed its result back and let the model continue.
+    contents.push({ role: "model", parts: [{ functionCall: fc }] });
+    contents.push({
+      role: "user",
+      parts: [{ functionResponse: { name: fc.name, response: { result: reply.text } } }],
+    });
+  }
+  return lastReply ?? { kind: "text", text: "무엇을 도와드릴까요?" };
 }
 
 /**
