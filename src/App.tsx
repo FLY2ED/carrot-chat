@@ -210,7 +210,7 @@ chat.send({ type: "send", text: "안녕하세요" });`}</code>
         </div>
         <div className="arch">
           <b>Durable Object · R2</b>
-          <span>Hibernation · SQLite seq 순서 · 서버 정책 + rate limit · 파일 첨부 · 어드민 계측</span>
+          <span>Hibernation · SQLite seq 순서 · JWT 핸드셰이크 · 서버 정책 + rate limit · 파일 첨부</span>
         </div>
         <div className="arch">
           <b>리치 메시지 · AI</b>
@@ -218,7 +218,7 @@ chat.send({ type: "send", text: "안녕하세요" });`}</code>
         </div>
         <div className="arch">
           <b>Tested</b>
-          <span>Vitest 28 · Playwright E2E 8 · typecheck/build 통과</span>
+          <span>Vitest 33 · Playwright E2E 9 · typecheck/build 통과</span>
         </div>
       </div>
 

@@ -71,7 +71,7 @@ export function DocsApp() {
           <div className="docs__badges">
             <span className="badge">React 19 · TypeScript</span>
             <span className="badge">Cloudflare Durable Objects · R2</span>
-            <span className="badge">Vitest 28 · Playwright 8</span>
+            <span className="badge">Vitest 33 · Playwright 9</span>
           </div>
         </header>
 
@@ -331,29 +331,32 @@ if (!parsed.success) return; // 변조/손상 프레임 폐기`}
         </section>
 
         <section id="auth">
-          <h2>인증</h2>
+          <h2>인증 (JWT 핸드셰이크)</h2>
           <p>
-            데모는 <code>?user=&amp;name=</code> 쿼리스트링으로 식별하지만, 실서비스는 WebSocket
-            핸드셰이크에 토큰을 실어 보냅니다. 브라우저 WebSocket은 <code>Authorization</code> 헤더를
-            못 붙이므로 쿼리스트링·서브프로토콜·쿠키·첫 메시지 중 하나로 JWT를 전달하고, 서버가 검증한
-            뒤 연결을 수락합니다.
+            브라우저 WebSocket은 <code>Authorization</code> 헤더를 못 붙이므로 토큰을 쿼리스트링에
+            싣습니다. Worker가 <b>업그레이드를 수락하기 전에</b> HS256 서명·만료를 WebCrypto로 검증하고
+            (<code>worker/auth.ts</code>), 검증된 <code>sub</code>/<code>name</code>을 신원으로
+            <b>주입</b>합니다 — 클라이언트가 보낸 <code>user</code>/<code>name</code>은 무시되므로 위조
+            불가. 공개 놀이터는 <code>ALLOW_ANON</code>으로 익명을 허용하고, 실배포는{" "}
+            <code>ALLOW_ANON=false</code>로 토큰을 강제합니다.
           </p>
           <CodeBlock
-            code={`// 연결 시 토큰 전달 (서버가 검증 후 acceptWebSocket)
-let chat = new ChatClient({
-  url: \`wss://host/api/room/\${roomId}/ws?token=\${jwt}\`,
-});
+            code={`// worker: 업그레이드 전 검증 + 신원 주입 (위조 불가)
+const claims = await verifyToken(env.JWT_SECRET, token, nowSec);
+if (!claims) return new Response("invalid_or_expired_token", { status: 401 });
+url.searchParams.set("user", claims.sub);   // 클라가 보낸 값 덮어씀
+url.searchParams.set("name", claims.name);
+return chatRoom.fetch(new Request(url, request)); // 검증된 신원으로 DO 연결
 
-// 토큰 만료 대비: 갱신 후 소켓 재연결 (refreshGate 패턴)
-window.addEventListener("auth-refreshed", (e) => {
-  chat.close();
-  chat = new ChatClient({ url: withToken(e.detail.token) });
-  chat.connect();
-});`}
+// 토큰 발급(데모): 실서비스는 로그인 백엔드가 발급 — 여기선 /api/dev-token이 대역
+const { token } = await fetch(\`/api/dev-token?user=\${id}&name=\${name}\`).then(r => r.json());
+new ChatClient({ url: \`wss://host/api/room/\${roomId}/ws?token=\${token}\` });`}
           />
           <p className="docs__note">
-            동시 갱신을 한 번으로 합치고 소켓·HTTP에 새 토큰을 전파하는 <b>refreshGate</b> 패턴은
-            실서비스 artdata의 Socket.io 채팅에서 실제로 운영한 방식입니다.
+            토큰 만료 대비 <b>refreshGate</b> — (재)연결마다 신선한 토큰을 제시하고, 동시 갱신을 한 번으로
+            합쳐 소켓·HTTP에 새 토큰을 전파하는 패턴은 실서비스 artdata의 Socket.io 채팅에서 운영한
+            방식입니다. 이 SDK에선 (재)연결 직전에 <code>getToken()</code>으로 토큰을 받아 URL에 싣는
+            형태로 같은 보장을 줍니다.
           </p>
         </section>
 

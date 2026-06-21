@@ -155,6 +155,66 @@ test("AI assistant answers an @ai mention with a card, authored by the bot (offl
   await expect(bada.getByRole("button", { name: "수락" })).toBeVisible();
 });
 
+test("JWT handshake: a valid token connects with the claimed identity; a bad token is rejected", async ({
+  page,
+  request,
+}) => {
+  const room = `e2e-auth-${Date.now()}`;
+
+  // Demo issuer mints a token bound to a specific identity.
+  const tokRes = await request.get(
+    `/api/dev-token?user=u-carrot&name=${encodeURIComponent("당근이")}&ttl=60`,
+  );
+  expect(tokRes.ok()).toBeTruthy();
+  const { token } = await tokRes.json();
+  expect(token).toBeTruthy();
+
+  await page.goto("/"); // need a page origin to open a WebSocket from
+
+  // A valid token connects — and the server's `hello` carries the CLAIMED identity
+  // even though we deliberately pass a different user/name (server overrides → no spoofing).
+  const helloName = await page.evaluate(
+    ({ room, token }) =>
+      new Promise<string>((resolve) => {
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(
+          `${proto}//${location.host}/api/room/${room}/ws?user=spoof&name=spoofed&token=${token}`,
+        );
+        ws.onmessage = (e) => {
+          const msg = JSON.parse(e.data as string);
+          if (msg.type === "hello") {
+            resolve(msg.selfName);
+            ws.close();
+          }
+        };
+        ws.onerror = () => resolve("__error__");
+        setTimeout(() => resolve("__timeout__"), 4000);
+      }),
+    { room, token },
+  );
+  expect(helloName).toBe("당근이");
+
+  // A bad token is rejected at the handshake (server returns 401, never 101).
+  const badResult = await page.evaluate(
+    ({ room }) =>
+      new Promise<string>((resolve) => {
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const ws = new WebSocket(
+          `${proto}//${location.host}/api/room/${room}/ws?token=garbage.bad.token`,
+        );
+        ws.onopen = () => {
+          resolve("opened");
+          ws.close();
+        };
+        ws.onerror = () => resolve("rejected");
+        ws.onclose = (e) => resolve(e.code === 1000 ? "clean-close" : "rejected");
+        setTimeout(() => resolve("timeout"), 4000);
+      }),
+    { room },
+  );
+  expect(badResult).toBe("rejected");
+});
+
 test("admin console reflects room activity + mask rate, and rejects bad tokens", async ({
   page,
   request,
