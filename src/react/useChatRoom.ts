@@ -52,6 +52,10 @@ export function useChatRoom(roomId: string, user: string, name: string) {
   const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sendTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const clientId = useMemo(() => getClientId(), []);
+  // Kept current each render so `attach` (in a [store]-only memo) can read the
+  // live room without re-creating the whole actions object on every room change.
+  const roomIdRef = useRef(roomId);
+  roomIdRef.current = roomId;
 
   useEffect(() => {
     const sendTimers = sendTimersRef.current;
@@ -194,6 +198,41 @@ export function useChatRoom(roomId: string, user: string, name: string) {
       // Tap a card button (e.g. accept an appointment) → server emits a system message.
       tapAction: (messageId: string, actionId: string) =>
         clientRef.current?.send({ type: "action", messageId, actionId }),
+      // Upload a file to R2 via the room's upload endpoint, then compose an
+      // image/file message pointing at the returned (absolute) media URL.
+      attach: async (file: File) => {
+        if (file.size > 5 * 1024 * 1024) {
+          store.setState({ notice: "파일이 너무 커요 (최대 5MB)" });
+          return;
+        }
+        try {
+          const res = await fetch(
+            `/api/room/${encodeURIComponent(roomIdRef.current)}/upload`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": file.type || "application/octet-stream",
+                "x-filename": encodeURIComponent(file.name),
+              },
+              body: file,
+            },
+          );
+          if (!res.ok) {
+            store.setState({ notice: "업로드에 실패했어요" });
+            return;
+          }
+          const media = (await res.json()) as Media;
+          const kind = file.type.startsWith("image/") ? "image" : "file";
+          clientRef.current?.send({
+            type: "compose",
+            kind,
+            media,
+            clientMsgId: crypto.randomUUID(),
+          });
+        } catch {
+          store.setState({ notice: "업로드 중 오류가 발생했어요" });
+        }
+      },
       setTyping: (isTyping: boolean) =>
         clientRef.current?.send({ type: "typing", isTyping }),
       markRead: (messageId: string) =>

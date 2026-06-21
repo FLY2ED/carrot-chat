@@ -87,6 +87,7 @@ export function ChatPanel({ roomId, user, name, accent, onApi }: Props) {
       <Composer
         onSend={room.sendMessage}
         onTyping={room.setTyping}
+        onAttach={room.attach}
         disabled={!connectionOpen}
       />
     </section>

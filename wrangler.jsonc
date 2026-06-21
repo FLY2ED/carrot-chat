@@ -18,6 +18,11 @@
       { "name": "ADMIN_HUB", "class_name": "AdminHub" }
     ]
   },
+  "r2_buckets": [
+    // Image/file attachments. Local dev simulates this via miniflare (no real
+    // bucket needed); before deploy run: wrangler r2 bucket create carrot-chat-media
+    { "binding": "MEDIA", "bucket_name": "carrot-chat-media" }
+  ],
   "migrations": [
     // SQLite-backed Durable Objects — available on the Workers Free plan.
     { "tag": "v1", "new_sqlite_classes": ["ChatRoom"] },

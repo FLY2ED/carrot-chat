@@ -109,6 +109,32 @@ test("rich card message: appointment card broadcasts, tapping an action emits a 
   await expect(bada.getByText('바다님이 "수락"을(를) 선택했어요')).toBeVisible();
 });
 
+test("file attachment uploads to R2 and renders as an image message in both clients", async ({
+  page,
+}) => {
+  const room = `e2e-media-${Date.now()}`;
+  await page.goto(`/?room=${room}`);
+
+  const alice = page.locator('section[aria-label="앨리스 채팅 패널"]');
+  const bada = page.locator('section[aria-label="바다 채팅 패널"]');
+  await expect(alice.getByText("실시간 연결됨")).toBeVisible();
+  await expect(bada.getByText("실시간 연결됨")).toBeVisible();
+
+  // A real 1x1 PNG as the upload payload.
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await alice
+    .locator('input[type="file"]')
+    .setInputFiles({ name: "그림.png", mimeType: "image/png", buffer: png });
+
+  // The compose event broadcasts an image message; both panels render an <img>
+  // pointing at the R2-backed /api/media/ URL.
+  await expect(bada.locator('img[src*="/api/media/"]')).toBeVisible();
+  await expect(alice.locator('img[src*="/api/media/"]')).toBeVisible();
+});
+
 test("AI assistant answers an @ai mention with a card, authored by the bot (offline stub)", async ({
   page,
 }) => {
