@@ -1,6 +1,7 @@
 import { ChatRoom } from "./chat-room";
 import { AdminHub } from "./admin-hub";
 import { handleServe, handleUpload } from "./media";
+import { authorizeHandshake, signToken } from "./auth";
 
 // Re-export the Durable Object classes so the runtime can instantiate them.
 export { ChatRoom, AdminHub };
@@ -20,9 +21,24 @@ export default {
       if (request.headers.get("Upgrade") !== "websocket") {
         return new Response("Expected WebSocket Upgrade", { status: 426 });
       }
+      // Verify the JWT (if any) BEFORE the upgrade; inject the trusted identity so
+      // a client can't spoof user/name. Anonymous allowed only when ALLOW_ANON.
+      const gate = await authorizeHandshake(request, url, env);
+      if (!gate.ok) return new Response(gate.reason ?? "Unauthorized", { status: 401 });
       // One Durable Object instance per room id → the room's single source of truth.
       const stub = env.CHAT_ROOM.getByName(wsMatch[1]);
-      return stub.fetch(request);
+      return stub.fetch(gate.request ?? request);
+    }
+
+    // Demo token issuer. A real app mints tokens from its own login backend after
+    // authenticating the user; this stands in so the JWT handshake is exercisable.
+    if (url.pathname === "/api/dev-token") {
+      if (!env.JWT_SECRET) return new Response("auth not configured", { status: 503 });
+      const sub = (url.searchParams.get("user") ?? `u-${crypto.randomUUID().slice(0, 8)}`).slice(0, 64);
+      const name = (url.searchParams.get("name") ?? "익명").slice(0, 32);
+      const ttl = Math.min(Math.max(Number(url.searchParams.get("ttl") ?? "3600"), 5), 86400);
+      const token = await signToken(env.JWT_SECRET, { sub, name }, ttl, Math.floor(Date.now() / 1000));
+      return Response.json({ token, sub, name, expiresIn: ttl });
     }
 
     // Media: raw-body upload (POST) and object serving (GET) via R2.

@@ -30,7 +30,12 @@
   ],
   "vars": {
     // Read-only admin console token. Override with a Wrangler secret in production.
-    "ADMIN_TOKEN": "carrot-admin-demo"
+    "ADMIN_TOKEN": "carrot-admin-demo",
+    // Demo JWT signing secret — override with `wrangler secret put JWT_SECRET`.
+    "JWT_SECRET": "carrot-demo-jwt-secret-change-me",
+    // The public playground allows anonymous connections; set "false" to require
+    // a verified token on every WebSocket handshake.
+    "ALLOW_ANON": "true"
   },
   "observability": { "enabled": true },
   "routes": [{ "pattern": "carrot.naldadev.com", "custom_domain": true }]
