@@ -136,6 +136,12 @@ export default function App() {
     });
   };
 
+  // @ai 멘션으로 in-room AI 어시스턴트 호출 — 키가 없으면 서버가 오프라인 스텁으로 답함.
+  const askAssistant = () => {
+    aliceApi.current?.sendMessage("@ai 약속 잡아줘");
+    showToast("당근 AI를 호출했어요 — 잠시 후 답장이 도착해요");
+  };
+
   const handleAliceApi = useCallback((api: ChatPanelApi | null) => {
     aliceApi.current = api;
   }, []);
@@ -247,6 +253,9 @@ chat.send({ type: "send", text: "안녕하세요" });`}</code>
           </button>
           <button type="button" className="btn btn--soft" onClick={sendSafeNumberCard}>
             📞 안심번호
+          </button>
+          <button type="button" className="btn btn--soft" onClick={askAssistant}>
+            🤖 AI 어시스턴트
           </button>
         </div>
         {toast && (

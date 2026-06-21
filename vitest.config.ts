@@ -10,6 +10,8 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./test/setup.ts"],
-    include: ["src/**/*.test.{ts,tsx}"],
+    // Worker tests are limited to PURE modules (no `cloudflare:workers` import),
+    // e.g. the assistant's offline routing. DO behaviour stays in Playwright.
+    include: ["src/**/*.test.{ts,tsx}", "worker/**/*.test.ts"],
   },
 });

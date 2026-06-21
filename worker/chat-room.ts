@@ -1,6 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import { ClientEventSchema, maskContact } from "../src/chat-core";
 import type { Card, Media, Member, Message, ServerEvent } from "../src/chat-core";
+import {
+  ASSISTANT_ID,
+  ASSISTANT_NAME,
+  parseAssistantTrigger,
+  runAssistant,
+} from "./assistant";
 
 /** Per-connection data that must survive WebSocket hibernation. */
 interface Attachment {
@@ -184,6 +190,11 @@ export class ChatRoom extends DurableObject<Env> {
           clientMsgId: event.clientMsgId,
         });
         this.deliver(ws, message, deduped);
+        // AI assistant: trigger only on a fresh message (not a dedup'd retry).
+        if (!deduped) {
+          const prompt = parseAssistantTrigger(original);
+          if (prompt !== null) void this.runAssistantTurn(prompt);
+        }
         break;
       }
       case "compose": {
@@ -277,6 +288,30 @@ export class ChatRoom extends DurableObject<Env> {
     return this.recentMessages();
   }
 
+  /**
+   * Run one AI assistant turn and broadcast its reply as a bot-authored message.
+   * Best-effort: any failure inside `runAssistant` is swallowed there (returns a
+   * text apology), so the chat is never blocked on the model. The bot is a virtual
+   * sender — it has no socket, so it never appears in presence/members.
+   */
+  private async runAssistantTurn(prompt: string): Promise<void> {
+    const bot = { senderId: ASSISTANT_ID, senderName: ASSISTANT_NAME };
+    this.broadcast({ type: "typing", ...bot, isTyping: true });
+    try {
+      const reply = await runAssistant(this.env, this.recentMessages(), prompt);
+      const { message } = this.persist(
+        { userId: ASSISTANT_ID, name: ASSISTANT_NAME },
+        { text: reply.text, kind: reply.kind, card: reply.card, maskApplied: false },
+      );
+      this.broadcast({ type: "message", message });
+      void this.reportToHub(true);
+    } catch {
+      /* assistant is best-effort; the chat keeps working without it */
+    } finally {
+      this.broadcast({ type: "typing", ...bot, isTyping: false });
+    }
+  }
+
   /** Sliding-window rate limit per connection. Returns false (and notifies) if over. */
   private allowSend(ws: WebSocket, att: Attachment): boolean {
     const now = Date.now();
@@ -300,7 +335,7 @@ export class ChatRoom extends DurableObject<Env> {
    * `deduped: true`, so a retry is effectively-once — no duplicate row.
    */
   private persist(
-    att: Attachment,
+    sender: { userId: string; name: string },
     parts: {
       text: string;
       kind: Message["kind"];
@@ -314,7 +349,7 @@ export class ChatRoom extends DurableObject<Env> {
       const existing = this.ctx.storage.sql
         .exec(
           `SELECT ${HISTORY_COLS} FROM messages WHERE senderId = ? AND clientMsgId = ? LIMIT 1`,
-          att.userId,
+          sender.userId,
           parts.clientMsgId,
         )
         .toArray()[0] as unknown as Row | undefined;
@@ -331,8 +366,8 @@ export class ChatRoom extends DurableObject<Env> {
     this.ctx.storage.sql.exec(
       "INSERT INTO messages (id, senderId, senderName, text, ts, maskApplied, kind, payload, clientMsgId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       id,
-      att.userId,
-      att.name,
+      sender.userId,
+      sender.name,
       parts.text,
       now,
       parts.maskApplied ? 1 : 0,
@@ -350,8 +385,8 @@ export class ChatRoom extends DurableObject<Env> {
     return {
       message: {
         id,
-        senderId: att.userId,
-        senderName: att.name,
+        senderId: sender.userId,
+        senderName: sender.name,
         text: parts.text,
         ts: now,
         maskApplied: parts.maskApplied,

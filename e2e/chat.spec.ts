@@ -109,6 +109,26 @@ test("rich card message: appointment card broadcasts, tapping an action emits a 
   await expect(bada.getByText('바다님이 "수락"을(를) 선택했어요')).toBeVisible();
 });
 
+test("AI assistant answers an @ai mention with a card, authored by the bot (offline stub)", async ({
+  page,
+}) => {
+  const room = `e2e-ai-${Date.now()}`;
+  await page.goto(`/?room=${room}`);
+
+  const alice = page.locator('section[aria-label="앨리스 채팅 패널"]');
+  const bada = page.locator('section[aria-label="바다 채팅 패널"]');
+  await expect(alice.getByText("실시간 연결됨")).toBeVisible();
+
+  // Alice mentions the assistant; with no GEMINI_API_KEY the server uses the
+  // deterministic offline stub, which routes "약속" → an appointment card.
+  await page.getByRole("button", { name: "🤖 AI 어시스턴트" }).click();
+
+  // The bot reply is a normal message authored by "당근 AI", broadcast to everyone.
+  await expect(alice.getByText("📅 약속 제안")).toBeVisible();
+  await expect(bada.getByText("당근 AI")).toBeVisible();
+  await expect(bada.getByRole("button", { name: "수락" })).toBeVisible();
+});
+
 test("admin console reflects room activity + mask rate, and rejects bad tokens", async ({
   page,
   request,
