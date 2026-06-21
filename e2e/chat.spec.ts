@@ -215,6 +215,69 @@ test("JWT handshake: a valid token connects with the claimed identity; a bad tok
   expect(badResult).toBe("rejected");
 });
 
+test("multi-room inbox: a message bumps the recipient's inbox with unread count + preview", async ({
+  page,
+}) => {
+  const room = `e2e-inbox-${Date.now()}`;
+  await page.goto(`/?room=${room}`);
+
+  const alice = page.locator('section[aria-label="앨리스 채팅 패널"]');
+  const bada = page.locator('section[aria-label="바다 채팅 패널"]');
+  await expect(alice.getByText("실시간 연결됨")).toBeVisible();
+  await expect(bada.getByText("실시간 연결됨")).toBeVisible();
+
+  // Alice sends → both alice & bob are members, so the fan-out records to both
+  // inboxes (bob gets unread+1, alice's is fromSelf so no bump).
+  const text = `인박스 테스트 ${Date.now()}`;
+  await alice.getByLabel("메시지 입력").fill(text);
+  await alice.getByRole("button", { name: "보내기" }).click();
+  await expect(bada.getByText(text)).toBeVisible(); // delivered → inbox fan-out fired
+
+  // Open Bob's inbox — the room shows the preview + an unread badge of 1.
+  await page.goto(`/inbox.html?user=bob&name=${encodeURIComponent("바다")}`);
+  await expect(page.getByText("실시간 연결됨")).toBeVisible();
+  const row = page.locator(".inbox-row", { hasText: room });
+  await expect(row).toBeVisible();
+  await expect(row.getByText(text)).toBeVisible();
+  await expect(row.locator(".inbox-row__badge")).toHaveText("1");
+
+  // Favoriting persists in the UserInbox DO and re-renders via the live snapshot.
+  await row.locator(".inbox-row__fav").click();
+  await expect(row.locator(".inbox-row__fav.is-on")).toBeVisible();
+});
+
+test("inbox notification: a live arrival pops a toast and updates the unread tab title", async ({
+  page,
+  context,
+}) => {
+  const room = `e2e-notify-${Date.now()}`;
+  await page.goto(`/?room=${room}`);
+
+  const alice = page.locator('section[aria-label="앨리스 채팅 패널"]');
+  const bada = page.locator('section[aria-label="바다 채팅 패널"]');
+  await expect(alice.getByText("실시간 연결됨")).toBeVisible();
+  await expect(bada.getByText("실시간 연결됨")).toBeVisible();
+
+  // Bob's inbox open in a second tab (empty → baseline = 0 unread).
+  const inbox = await context.newPage();
+  await inbox.goto(`/inbox.html?user=bob&name=${encodeURIComponent("바다")}`);
+  await expect(inbox.getByText("실시간 연결됨")).toBeVisible();
+
+  // Alice sends while Bob's inbox is open → live snapshot bumps unread → toast fires.
+  const text = `알림 테스트 ${Date.now()}`;
+  await alice.getByLabel("메시지 입력").fill(text);
+  await alice.getByRole("button", { name: "보내기" }).click();
+
+  await expect(inbox.locator(".inbox-toast")).toBeVisible();
+  await expect(inbox.locator(".inbox-toast")).toContainText(text);
+  // This room's unread badge reflects the live arrival (per-room, so it's not
+  // affected by other rooms accumulated in the shared UserInbox during the run).
+  const row = inbox.locator(".inbox-row", { hasText: room });
+  await expect(row.locator(".inbox-row__badge")).toHaveText("1");
+
+  await inbox.close();
+});
+
 test("admin console reflects room activity + mask rate, and rejects bad tokens", async ({
   page,
   request,

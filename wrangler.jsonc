@@ -15,7 +15,8 @@
   "durable_objects": {
     "bindings": [
       { "name": "CHAT_ROOM", "class_name": "ChatRoom" },
-      { "name": "ADMIN_HUB", "class_name": "AdminHub" }
+      { "name": "ADMIN_HUB", "class_name": "AdminHub" },
+      { "name": "USER_INBOX", "class_name": "UserInbox" }
     ]
   },
   "r2_buckets": [
@@ -26,7 +27,8 @@
   "migrations": [
     // SQLite-backed Durable Objects — available on the Workers Free plan.
     { "tag": "v1", "new_sqlite_classes": ["ChatRoom"] },
-    { "tag": "v2", "new_sqlite_classes": ["AdminHub"] }
+    { "tag": "v2", "new_sqlite_classes": ["AdminHub"] },
+    { "tag": "v3", "new_sqlite_classes": ["UserInbox"] }
   ],
   "vars": {
     // Read-only admin console token. Override with a Wrangler secret in production.

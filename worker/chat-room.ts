@@ -73,6 +73,22 @@ const rowToMessage = (r: Row): Message => {
   };
 };
 
+/** Short preview text for a message in the multi-room inbox list. */
+const inboxPreview = (m: Message): string => {
+  switch (m.kind) {
+    case "system":
+      return m.text;
+    case "card":
+      return `📋 ${m.senderName}: ${m.card?.title ?? "카드"}`;
+    case "image":
+      return `📷 ${m.senderName}: 사진`;
+    case "file":
+      return `📎 ${m.senderName}: ${m.media?.name ?? "파일"}`;
+    default:
+      return `${m.senderName}: ${m.text}`;
+  }
+};
+
 /**
  * One ChatRoom Durable Object per room id. Holds the WebSocket connections and
  * message history (DO embedded SQLite). Hibernation API keeps idle rooms free.
@@ -238,6 +254,7 @@ export class ChatRoom extends DurableObject<Env> {
           maskApplied: false,
         });
         this.broadcast({ type: "message", message });
+        void this.reportToInboxes(message);
         break;
       }
       case "typing": {
@@ -304,6 +321,7 @@ export class ChatRoom extends DurableObject<Env> {
         { text: reply.text, kind: reply.kind, card: reply.card, maskApplied: false },
       );
       this.broadcast({ type: "message", message });
+      void this.reportToInboxes(message);
       void this.reportToHub(true);
     } catch {
       /* assistant is best-effort; the chat keeps working without it */
@@ -406,9 +424,38 @@ export class ChatRoom extends DurableObject<Env> {
    * sender's optimistic bubble without re-notifying the whole room.
    */
   private deliver(ws: WebSocket, message: Message, deduped: boolean): void {
-    if (deduped) this.sendTo(ws, { type: "message", message });
-    else this.broadcast({ type: "message", message });
+    if (deduped) {
+      this.sendTo(ws, { type: "message", message });
+    } else {
+      this.broadcast({ type: "message", message });
+      void this.reportToInboxes(message); // fresh message only — no double-count on retry
+    }
     void this.reportToHub(true);
+  }
+
+  /**
+   * Fan a fire-and-forget update out to each member's UserInbox DO. The sender's
+   * inbox updates the preview without bumping unread; everyone else gets +1.
+   * Best-effort: the chat is authoritative, inbox visibility is secondary. Only
+   * currently-connected members are notified (no offline delivery in this demo).
+   */
+  private async reportToInboxes(message: Message): Promise<void> {
+    try {
+      const roomId = (await this.ctx.storage.get<string>("roomId")) ?? "unknown";
+      const preview = inboxPreview(message);
+      await Promise.all(
+        this.members().map((m) =>
+          this.env.USER_INBOX.getByName(m.id).recordMessage(
+            roomId,
+            preview,
+            message.ts,
+            m.id === message.senderId,
+          ),
+        ),
+      );
+    } catch {
+      /* inbox visibility is best-effort */
+    }
   }
 
   private bump(col: StatColumn): void {

@@ -22,6 +22,7 @@ export default defineConfig({
             main: `${import.meta.dirname}/index.html`,
             admin: `${import.meta.dirname}/admin.html`,
             docs: `${import.meta.dirname}/docs.html`,
+            inbox: `${import.meta.dirname}/inbox.html`,
           },
         },
       },
