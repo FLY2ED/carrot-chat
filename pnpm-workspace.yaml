@@ -1,0 +1,7 @@
+packages:
+  - "packages/*"
+# Allow native/postinstall builds for the toolchain we actually use.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true

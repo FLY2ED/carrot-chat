@@ -6,12 +6,24 @@ import react from "@vitejs/plugin-react";
 // behaviour is covered end-to-end by Playwright instead.
 export default defineConfig({
   plugins: [react()],
+  // Resolve the workspace packages from source so unit tests run against the
+  // exact files we ship (no build step between editing and testing).
+  resolve: {
+    alias: {
+      "@naldadev/chat": `${import.meta.dirname}/packages/chat/src/index.ts`,
+      "@naldadev/chat-react": `${import.meta.dirname}/packages/chat-react/src/index.ts`,
+    },
+  },
   test: {
     environment: "jsdom",
     globals: true,
     setupFiles: ["./test/setup.ts"],
-    // Worker tests are limited to PURE modules (no `cloudflare:workers` import),
-    // e.g. the assistant's offline routing. DO behaviour stays in Playwright.
-    include: ["src/**/*.test.{ts,tsx}", "worker/**/*.test.ts"],
+    // Package unit tests + demo tests. Worker tests are limited to PURE modules
+    // (no `cloudflare:workers` import); DO behaviour stays in Playwright.
+    include: [
+      "packages/**/src/**/*.test.{ts,tsx}",
+      "src/**/*.test.{ts,tsx}",
+      "worker/**/*.test.ts",
+    ],
   },
 });

@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { ConnectionStatus, Member, Message } from "../chat-core";
+import type { ConnectionStatus, Member, Message } from "@naldadev/chat";
 
 export interface ChatState {
   status: ConnectionStatus;

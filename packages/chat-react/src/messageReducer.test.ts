@@ -6,7 +6,7 @@ import {
   prependPage,
   reconcileEcho,
 } from "./messageReducer";
-import type { Message } from "../chat-core/types";
+import type { Message } from "@naldadev/chat";
 
 const msg = (over: Partial<Message>): Message => ({
   id: "x",

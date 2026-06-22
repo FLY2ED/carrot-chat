@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { ClientEventSchema, maskContact } from "../src/chat-core";
-import type { Card, Media, Member, Message, ServerEvent } from "../src/chat-core";
+import { ClientEventSchema, maskContact } from "@naldadev/chat";
+import type { Card, Media, Member, Message, ServerEvent } from "@naldadev/chat";
 import {
   ASSISTANT_ID,
   ASSISTANT_NAME,

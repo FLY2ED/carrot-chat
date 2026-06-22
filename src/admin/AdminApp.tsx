@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "../shared/SiteHeader";
 import type { GlobalStats, RoomSummary } from "../../worker/admin-hub";
-import type { Message } from "../chat-core/types";
+import type { Message } from "@naldadev/chat";
 
 const TOKEN_KEY = "carrot-chat:adminToken";
 const POLL_MS = 3000;
