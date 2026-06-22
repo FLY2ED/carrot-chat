@@ -1,0 +1,43 @@
+name: Release
+
+# On every push to main, Changesets opens (or updates) a "Version Packages" PR.
+# Merging that PR publishes the changed packages to npm.
+#
+# Publishing uses npm Trusted Publishing (OIDC) — no NPM_TOKEN secret. Prereqs:
+#   1. Publish each package ONCE manually so the name exists on npm:
+#        pnpm --filter @naldadev/chat publish --access public --provenance
+#        pnpm --filter @naldadev/chat-react publish --access public --provenance
+#   2. On npmjs.com, add this repo + workflow as a Trusted Publisher for each pkg.
+# After that this workflow publishes automatically with provenance.
+on:
+  push:
+    branches: [main]
+
+concurrency: release-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write # OIDC for npm Trusted Publishing / provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action@v1
+        with:
+          publish: pnpm release
+          version: pnpm version-packages
+          commit: "chore: version packages"
+          title: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "true"

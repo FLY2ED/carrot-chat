@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useStore } from "zustand";
-import { ChatClient } from "../chat-core";
+import { ChatClient } from "@naldadev/chat";
 import { createChatStore } from "./store";
 import { getClientId } from "./clientId";
 import {
@@ -10,7 +10,7 @@ import {
   prependPage,
   reconcileEcho,
 } from "./messageReducer";
-import type { Card, Media, Message } from "../chat-core";
+import type { Card, Media, Message } from "@naldadev/chat";
 
 export function buildWsUrl(
   roomId: string,

@@ -1,9 +1,9 @@
 import { useEffect, type CSSProperties } from "react";
-import { useChatRoom } from "../useChatRoom";
+import { useChatRoom } from "@naldadev/chat-react";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import { PresenceBar, StatusBadge, TypingIndicator } from "./Bits";
-import type { Card, Media } from "../../chat-core";
+import type { Card, Media } from "@naldadev/chat";
 
 /** Imperative handle the parent can drive (sample buttons, reconnect sim). */
 export interface ChatPanelApi {

@@ -13,7 +13,7 @@
 // The chat is always authoritative and must never break: any network/quota/parse
 // failure degrades to a short text reply, never an exception that reaches the room.
 
-import type { Card, Message } from "../src/chat-core";
+import type { Card, Message } from "@naldadev/chat";
 
 export const ASSISTANT_ID = "assistant";
 export const ASSISTANT_NAME = "당근 AI";

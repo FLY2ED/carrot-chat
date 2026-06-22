@@ -1,21 +1,30 @@
 {
-  "name": "carrot-chat",
+  "name": "carrot-chat-monorepo",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "재사용 가능한 웹채팅 SDK 데모 — React + TypeScript + Cloudflare Durable Objects(WebSocket)",
+  "packageManager": "pnpm@11.7.0",
+  "engines": { "node": ">=20" },
+  "description": "Monorepo for @naldadev/chat — the framework-agnostic chat SDK, its React bindings, and the Cloudflare Durable Objects demo.",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:packages": "pnpm -r --filter \"./packages/*\" run build",
     "preview": "npm run build && vite preview",
     "deploy": "npm run build && wrangler deploy",
     "cf-typegen": "wrangler types",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "check:dist": "pnpm run build:packages && pnpm -r --filter \"./packages/*\" exec publint && attw --pack packages/chat --ignore-rules cjs-resolves-to-esm && attw --pack packages/chat-react --ignore-rules cjs-resolves-to-esm",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm run build:packages && changeset publish"
   },
   "dependencies": {
+    "@naldadev/chat": "workspace:*",
+    "@naldadev/chat-react": "workspace:*",
     "@tanstack/react-virtual": "^3.14.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -23,7 +32,11 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.39.0",
+    "@arethetypeswrong/cli": "^0.18.0",
+    "@changesets/cli": "^2.27.0",
+    "publint": "^0.3.0",
+    "tsup": "^8.0.0",
+    "@cloudflare/vite-plugin": "1.41.0",
     "@cloudflare/vitest-pool-workers": "^0.12.4",
     "@playwright/test": "^1.60.0",
     "@testing-library/dom": "^10.4.1",

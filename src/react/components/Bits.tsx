@@ -1,4 +1,4 @@
-import type { ConnectionStatus, Member } from "../../chat-core/types";
+import type { ConnectionStatus, Member } from "@naldadev/chat";
 
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
   connecting: "연결 중…",

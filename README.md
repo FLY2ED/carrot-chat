@@ -1,107 +1,79 @@
-# carrot-chat
+# @naldadev/chat
 
-당근 채팅팀이 만드는 **"재사용 가능한 웹채팅 SDK"** 미션을 작게 재현한 데모입니다.
-React + TypeScript 프론트엔드와 Cloudflare **Durable Objects(WebSocket)** 백엔드로,
-실시간 1:1/그룹 채팅의 핵심(메시지·읽음·타이핑·접속·재연결)을 헤드리스 SDK로 분리해 구현했습니다.
+A **reusable, framework-agnostic real-time web chat SDK** — a WebSocket client
+with auto-reconnect, heartbeat, and a Zod-validated protocol shared by client and
+server, with a Cloudflare **Durable Objects** reference backend.
 
-**라이브:** https://carrot.naldadev.com · **만든 사람:** 박성재 (NALDA)
-
----
-
-## 지원서에서 보여주려는 것
-
-이 프로젝트는 채팅 앱 UI 자체보다, 당근 채팅팀 공고에서 요구하는 다음 역량을 증명하는 데 초점을 두었습니다.
-
-- **웹채팅 SDK 경계 설계** — WebSocket 연결/재연결/하트비트/이벤트 팬아웃을 React 밖의 `chat-core`로 분리
-- **확장 가능한 이벤트 모델** — 클라이언트와 서버가 같은 TypeScript discriminated union을 공유
-- **운영 정책 제어** — 연락처/이메일 마스킹을 클라이언트가 아니라 Durable Object 서버에서 강제
-- **상태관리 경험** — React 바인딩은 인스턴스별 Zustand store로 SDK 상태를 렌더링
-- **테스트 전략** — 순수 함수, SDK 상태머신, 컴포넌트, 실제 WebSocket E2E를 분리해 검증
-- **접근성 기본기** — 대화 로그 `aria-live`, 입력 라벨, 연결 상태 `role="status"` 적용
-
-제출용 보조 문서는 `docs/`에 정리했습니다.
-
-- [`docs/daangn-chat-research.md`](docs/daangn-chat-research.md): 채용공고/팀 블로그 리서치 요약
-- [`docs/evidence-map.md`](docs/evidence-map.md): 공고 요구사항과 코드/프로젝트 근거 매핑
-- [`docs/application-draft.md`](docs/application-draft.md): 지원서 답변 초안
-- [`docs/resume-bullets.md`](docs/resume-bullets.md): 이력서/포트폴리오용 짧은 bullet
-- [`docs/submission-checklist.md`](docs/submission-checklist.md): 제출 전 체크리스트
-
----
-
-## 왜 이렇게 설계했나
-
-채팅팀의 실제 일("표준 컴포넌트 · 이벤트 모델 · API 어댑터를 갖춘 재사용 가능한 채팅 SDK")을
-의식해, UI와 통신 로직을 분리했습니다.
-
-```
-src/chat-core/   ← 프레임워크 비종속 헤드리스 SDK (이 폴더만 떼어내 어디서든 재사용 가능)
-  types.ts        타입 안전 이벤트 모델 (client ↔ server 공용, 워커도 같은 타입을 import)
-  protocol.ts     연락처/금칙어 마스킹 정책 (순수 함수)
-  reconnect.ts    지수 백오프 + 지터 (순수 함수 → 단위 테스트 용이)
-  client.ts       WebSocket 연결·자동 재연결·하트비트·이벤트 팬아웃
-
-src/react/       ← React 바인딩 (위 SDK를 소비)
-  store.ts        Zustand 스토어 (인스턴스별)
-  useChatRoom.ts  ChatClient ↔ store 연결 훅
-  components/     MessageList · Composer · TypingIndicator · 상태/접속 배지
-
-worker/          ← Cloudflare Worker + Durable Object 백엔드
-  index.ts        /api/room/:id/ws 를 방(room)별 DO로 라우팅, 그 외엔 정적 자산
-  chat-room.ts    방의 단일 진실 공급원: WebSocket Hibernation + SQLite 히스토리
-```
-
-## 핵심 기능
-
-- **실시간 메시징** — Durable Object가 방별 연결을 들고 `getWebSockets()`로 브로드캐스트
-- **읽음 확인 · 타이핑 인디케이터 · 접속자 수(presence)**
-- **자동 재연결** — 지수 백오프 + 지터, 의도적 종료와 비정상 종료 구분
-- **하트비트** — `setWebSocketAutoResponse(ping/pong)`로 DO를 깨우지 않고 연결 유지
-- **정책 제어** — 전화/이메일 등 연락처를 **서버측에서** 자동 마스킹(외부 거래 차단)
-- **낙관적 전송** — 보내는 즉시 `sending` 표시 → 서버 echo로 `sent` 교체(clientMsgId 매칭), 실패 시 재시도
-- **메시지 순서 · 멀티탭** — SQLite rowid 기반 `seq`로 전순서 보장, clientId로 탭/재연결 중복 제거
-- **무한 스크롤 · 가상화** — `@tanstack/react-virtual` 윈도잉 + 위로 스크롤 시 이전 페이지 로드
-- **운영 콘솔** — 별도 어드민(`/admin.html`)에서 활성 방·마스킹률·rate limit·재연결을 모니터링(읽기 전용, 토큰)
-- **접근성** — 대화 로그 `role="log"` + `aria-live`, 라벨링된 입력/버튼
-- **하이버네이션** — 유휴 방은 메모리에서 내려가도 SQLite 히스토리로 복구
-
-## 기술 스택
-
-| 영역 | 사용 |
-|---|---|
-| 프론트 | React 19, TypeScript, **Zustand**, Vite 7 |
-| 통합 | `@cloudflare/vite-plugin` (Vite dev 안에서 실제 workerd 런타임 구동) |
-| 백엔드 | Cloudflare **Workers + Durable Objects (WebSocket Hibernation)**, 내장 **SQLite** |
-| 테스트 | Vitest + Testing Library (단위/컴포넌트), **Playwright** (E2E) |
-
-> Durable Objects는 **SQLite 백엔드(`new_sqlite_classes`)** 라 Workers **무료 플랜**에서 동작합니다.
-
-## 테스트 전략
-
-통신 로직을 순수 함수/주입 가능한 형태로 설계해, 빠른 단위 테스트와 실제 환경 E2E를 분리했습니다.
-
-- **단위 (Vitest)** — 재연결 백오프, 연락처 마스킹, `ChatClient` 상태머신(연결·재연결·하트비트·의도적 종료)을 가짜 WebSocket + 가짜 타이머로 검증
-- **컴포넌트 (Testing Library)** — `Composer`의 타이핑 신호/전송/초기화
-- **E2E (Playwright)** — 같은 방의 두 클라이언트가 실제 Durable Object를 통해 **실시간 동기화·읽음 표시**되는지, 연락처가 **서버측에서 마스킹**되는지
+**Live demo:** https://carrot.naldadev.com
 
 ```bash
-npm run dev        # 로컬 개발 (Vite + Worker + DO, workerd 런타임)
-npm test           # Vitest 단위/컴포넌트
-npm run test:e2e   # Playwright E2E (dev 서버 자동 기동)
-npm run typecheck  # tsc --noEmit
-npm run build      # 프로덕션 빌드 (dist/client + worker)
-npm run deploy     # Cloudflare 배포 (wrangler)
+npm install @naldadev/chat zod                 # headless core
+npm install @naldadev/chat-react zustand       # + React bindings
 ```
 
-검증 기록(2026-06-18):
+## Packages
 
-- `npm run typecheck` 통과
-- `npm test` 통과: 5 files, 22 tests
-- `npm run build` 통과 (데모 + 어드민 멀티 엔트리 + Worker)
-- `npm run test:e2e` 통과: Chromium 5 tests (동기화·마스킹·재연결·낙관적·어드민)
+| Package | What | |
+|---|---|---|
+| [`@naldadev/chat`](packages/chat) | Framework-agnostic core: `ChatClient`, transport abstraction, reconnect, Zod protocol, `maskContact`. No React/DOM. | [![npm](https://img.shields.io/npm/v/@naldadev/chat.svg)](https://www.npmjs.com/package/@naldadev/chat) |
+| [`@naldadev/chat-react`](packages/chat-react) | `useChatRoom` hook — optimistic sends, reconnect-safe merge, per-room store. Headless. | [![npm](https://img.shields.io/npm/v/@naldadev/chat-react.svg)](https://www.npmjs.com/package/@naldadev/chat-react) |
 
-## 의도적으로 단순하게 둔 부분
+## Why
 
-- 인증은 데모용으로 쿼리스트링 사용자 식별(`?user=&name=`). 실제 서비스라면 JWT 핸드셰이크로 교체.
-- 미디어/파일 메시지는 범위 밖(텍스트만). R2 같은 객체 저장소와 결합하는 지점.
-- 어드민 인증은 공유 토큰(데모). 프로덕션이면 SSO·역할 기반으로 승격.
+- **Typed protocol = runtime-validated.** Client, React bindings, and the Worker
+  share one Zod `discriminatedUnion`. `safeParse` at the trust boundary — types
+  alone are not a defence.
+- **Connection is the hard part, so the SDK owns it.** Exponential backoff +
+  jitter, heartbeat ping/pong, stale-socket guard, pluggable transport (WS / SSE).
+- **Policy on the server.** Contact masking and rate limits run in the Durable
+  Object — a client can't bypass them.
+- **Rich messages built in.** `text` / `image` / `file` / `system` / `card`
+  (cards carry inline action buttons) ride one extensible model.
+
+## Repo layout (pnpm monorepo)
+
+```
+packages/chat        → @naldadev/chat        (published)
+packages/chat-react  → @naldadev/chat-react  (published)
+src, worker, *.html  → the demo app on Cloudflare Durable Objects (not published)
+e2e                  → Playwright end-to-end tests
+```
+
+The demo imports the packages **straight from source** via a Vite alias, so
+editing `packages/*/src` hot-reloads in the demo. Published consumers get the
+tsup-built `dist` through each package's `exports` map (ESM-only).
+
+The demo additionally showcases media uploads (R2), an in-room AI assistant
+(Gemini tool-use with an offline fallback), a JWT handshake, a multi-room inbox
+with offline delivery + notifications, and a read-only admin console.
+
+## Develop
+
+```bash
+pnpm install        # Node ≥ 20, pnpm ≥ 9
+pnpm dev            # demo at http://localhost:5180
+pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e
+pnpm check:dist     # build packages + publint + are-the-types-wrong
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Releases are managed with
+[Changesets](.changeset/README.md).
+
+## License
+
+MIT © [박성재 (NALDA)](https://github.com/FLY2ED)
+
+---
+
+<details>
+<summary>당근 채팅팀 지원 맥락 (application context)</summary>
+
+이 SDK는 당근 채팅팀의 "재사용 가능한 웹채팅 SDK" 미션을 재현하며 시작했습니다.
+제출용 보조 문서는 `docs/`에 정리되어 있습니다 —
+[리서치](docs/daangn-chat-research.md) ·
+[근거 매핑](docs/evidence-map.md) ·
+[지원서 초안](docs/application-draft.md) ·
+[이력서 bullet](docs/resume-bullets.md) ·
+[체크리스트](docs/submission-checklist.md).
+
+</details>

@@ -1,4 +1,4 @@
-import type { Message } from "../chat-core";
+import type { Message } from "@naldadev/chat";
 
 // Pure message-list reducers — no React, no store, no clock — so the optimistic
 // state machine and ordering can be unit-tested in milliseconds.

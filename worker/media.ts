@@ -5,7 +5,7 @@
 // The stored object's URL is returned ABSOLUTE because MediaSchema.url is a
 // strict URL (z.url()); a relative path would fail validation in `compose`.
 
-import type { Media } from "../src/chat-core";
+import type { Media } from "@naldadev/chat";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB — keep DO/R2 cheap, enough for the demo
 const ALLOWED_PREFIXES = ["image/", "video/", "audio/", "application/pdf", "text/"];

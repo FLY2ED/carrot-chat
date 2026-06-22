@@ -1,7 +1,8 @@
 name: CI
 
-# Fast gate on every PR and main push: typecheck + unit tests + build.
-# E2E (slow, boots workerd) lives in e2e.yml so this stays under ~2 min.
+# Fast gate on every PR and main push: typecheck + unit tests + demo build +
+# package validation (publint + are-the-types-wrong). E2E (slow, boots workerd)
+# lives in e2e.yml so this stays quick.
 on:
   pull_request:
   push:
@@ -16,11 +17,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm check:dist

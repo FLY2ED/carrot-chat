@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseAssistantTrigger, stubReply } from "./assistant";
-import type { Message } from "../src/chat-core";
+import type { Message } from "@naldadev/chat";
 
 describe("parseAssistantTrigger", () => {
   it("extracts the prompt after a mention or slash command", () => {

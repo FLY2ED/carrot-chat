@@ -1,0 +1,53 @@
+{
+  "name": "@naldadev/chat-react",
+  "version": "0.1.0",
+  "description": "React bindings for @naldadev/chat — a useChatRoom hook with optimistic sends, reconnect-safe history merge, and a per-room store.",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@naldadev/chat": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "react": "^19.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.2",
+    "zustand": "^5.0.0"
+  },
+  "keywords": ["chat", "react", "hooks", "websocket", "realtime", "sdk"],
+  "license": "MIT",
+  "author": "박성재 (NALDA) <naldadev@gmail.com>",
+  "homepage": "https://github.com/FLY2ED/carrot-chat/tree/main/packages/chat-react#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FLY2ED/carrot-chat.git",
+    "directory": "packages/chat-react"
+  },
+  "bugs": {
+    "url": "https://github.com/FLY2ED/carrot-chat/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

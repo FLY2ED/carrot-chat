@@ -12,6 +12,15 @@ export default defineConfig({
   plugins: [react(), cloudflare()],
   server: { port: 5180, strictPort: true },
   preview: { port: 5180, strictPort: true },
+  // The demo (client + worker) consumes the workspace packages straight from
+  // source — no build step, hot-reload of the SDK while developing the example.
+  // Published consumers get the tsup-built dist via each package's exports map.
+  resolve: {
+    alias: {
+      "@naldadev/chat": `${import.meta.dirname}/packages/chat/src/index.ts`,
+      "@naldadev/chat-react": `${import.meta.dirname}/packages/chat-react/src/index.ts`,
+    },
+  },
   // Multi-page on the CLIENT environment only (the chat demo + the operations
   // console as separate entries) — the Worker environment keeps its own entry.
   environments: {
