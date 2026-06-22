@@ -1,14 +1,19 @@
 name: Release
 
-# On every push to main, Changesets opens (or updates) a "Version Packages" PR.
-# Merging that PR publishes the changed packages to npm.
+# On every push to main, Changesets opens (or updates) a "Version Packages" PR;
+# merging that PR publishes the changed packages to npm.
 #
-# Publishing uses npm Trusted Publishing (OIDC) — no NPM_TOKEN secret. Prereqs:
-#   1. Publish each package ONCE manually so the name exists on npm:
+# DISABLED until publishing is bootstrapped. To enable, set the repo variable
+# RELEASE_ENABLED=true (Settings → Secrets and variables → Actions → Variables)
+# AFTER doing the one-time setup:
+#   1. Allow Actions to open PRs: Settings → Actions → General → Workflow
+#      permissions → check "Allow GitHub Actions to create and approve pull requests".
+#   2. Publish each package ONCE manually so the name exists on npm (works around
+#      the scoped + Trusted-Publishing first-publish E404):
 #        pnpm --filter @naldadev/chat publish --access public --provenance
 #        pnpm --filter @naldadev/chat-react publish --access public --provenance
-#   2. On npmjs.com, add this repo + workflow as a Trusted Publisher for each pkg.
-# After that this workflow publishes automatically with provenance.
+#   3. On npmjs.com, add this repo + this workflow as a Trusted Publisher per pkg.
+# After that this workflow versions + publishes automatically with provenance.
 on:
   push:
     branches: [main]
@@ -22,6 +27,8 @@ permissions:
 
 jobs:
   release:
+    # Skipped (green) until the maintainer bootstraps publishing — see header.
+    if: ${{ vars.RELEASE_ENABLED == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
